@@ -689,6 +689,128 @@ var (
 				granted_time,
 				with_grant_option
 			) values(%d,%d,"%s",%v);`
+
+	createMysqlSysTableSql = []string{
+		`CREATE TABLE user (
+			Host char(255)  NOT NULL DEFAULT '',
+			User char(32)  NOT NULL DEFAULT '',
+			Select_priv varchar(10) NOT NULL DEFAULT 'N',
+			Insert_priv varchar(10) NOT NULL DEFAULT 'N',
+			Update_priv varchar(10) NOT NULL DEFAULT 'N',
+			Delete_priv varchar(10) NOT NULL DEFAULT 'N',
+			Create_priv varchar(10) NOT NULL DEFAULT 'N',
+			Drop_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Reload_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Shutdown_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Process_priv varchar(10)  NOT NULL DEFAULT 'N',
+			File_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Grant_priv varchar(10)  NOT NULL DEFAULT 'N',
+			References_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Index_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Alter_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Show_db_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Super_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_tmp_table_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Lock_tables_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Execute_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Repl_slave_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Repl_client_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_view_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Show_view_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_routine_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Alter_routine_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_user_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Event_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Trigger_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_tablespace_priv varchar(10)  NOT NULL DEFAULT 'N',
+			ssl_type varchar(10)  NOT NULL DEFAULT '',
+			ssl_cipher blob NOT NULL,
+			x509_issuer blob NOT NULL,
+			x509_subject blob NOT NULL,
+			max_questions int unsigned NOT NULL DEFAULT '0',
+			max_updates int unsigned NOT NULL DEFAULT '0',
+			max_connections int unsigned NOT NULL DEFAULT '0',
+			max_user_connections int unsigned NOT NULL DEFAULT '0',
+			plugin char(64)  NOT NULL DEFAULT 'caching_sha2_password',
+			authentication_string text ,
+			password_expired varchar(10)  NOT NULL DEFAULT 'N',
+			password_last_changed timestamp NULL DEFAULT NULL,
+			password_lifetime smallint unsigned DEFAULT NULL,
+			account_locked varchar(10)  NOT NULL DEFAULT 'N',
+			Create_role_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Drop_role_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Password_reuse_history smallint unsigned DEFAULT NULL,
+			Password_reuse_time smallint unsigned DEFAULT NULL,
+			Password_require_current varchar(10)  DEFAULT NULL,
+			User_attributes json DEFAULT NULL,
+			PRIMARY KEY (Host,User)
+		  );`,
+		`CREATE TABLE db (
+			Host char(255) NOT NULL DEFAULT '',
+			Db char(64)  NOT NULL DEFAULT '',
+			User char(32)  NOT NULL DEFAULT '',
+			Select_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Insert_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Update_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Delete_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Drop_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Grant_priv varchar(10)  NOT NULL DEFAULT 'N',
+			References_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Index_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Alter_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_tmp_table_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Lock_tables_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_view_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Show_view_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Create_routine_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Alter_routine_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Execute_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Event_priv varchar(10)  NOT NULL DEFAULT 'N',
+			Trigger_priv varchar(10)  NOT NULL DEFAULT 'N',
+			PRIMARY KEY (Host,Db,User),
+			KEY User (User)
+		  );`,
+		`CREATE TABLE procs_priv (
+			Host char(255)  NOT NULL DEFAULT '',
+			Db char(64)  NOT NULL DEFAULT '',
+			User char(32)  NOT NULL DEFAULT '',
+			Routine_name char(64)  NOT NULL DEFAULT '',
+			Routine_type varchar(10)  NOT NULL,
+			Grantor varchar(288)  NOT NULL DEFAULT '',
+			Proc_priv set('Execute','Alter Routine','Grant')  NOT NULL DEFAULT '',
+			Timestamp timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (Host,Db,User,Routine_name,Routine_type),
+			KEY Grantor (Grantor)
+		  );`,
+		`CREATE TABLE columns_priv (
+			Host char(255)  NOT NULL DEFAULT '',
+			Db char(64)  NOT NULL DEFAULT '',
+			User char(32)  NOT NULL DEFAULT '',
+			Table_name char(64)  NOT NULL DEFAULT '',
+			Column_name char(64)  NOT NULL DEFAULT '',
+			Timestamp timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			Column_priv varchar(10) NOT NULL DEFAULT '',
+			PRIMARY KEY (Host,Db,User,Table_name,Column_name)
+		  );`,
+		`CREATE TABLE tables_priv (
+			Host char(255)  NOT NULL DEFAULT '',
+			Db char(64)  NOT NULL DEFAULT '',
+			User char(32)  NOT NULL DEFAULT '',
+			Table_name char(64)  NOT NULL DEFAULT '',
+			Grantor varchar(288)  NOT NULL DEFAULT '',
+			Timestamp timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			Table_priv varchar(10) NOT NULL DEFAULT '',
+			Column_priv varchar(10) NOT NULL DEFAULT '',
+			PRIMARY KEY (Host,Db,User,Table_name),
+			KEY Grantor (Grantor)
+		  )`,
+	}
+
+	createInformationSysViewSql = []string{
+		``,
+		``,
+	}
 )
 
 var (
@@ -3446,6 +3568,11 @@ func InitSysTenant(ctx context.Context) error {
 		return err
 	}
 
+	err = createTablesInMysqlSchema(ctx, tenant, pu)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -3560,6 +3687,35 @@ func createTablesInInformationSchema(ctx context.Context, tenant *TenantInfo, pu
 		return err
 	}
 	return err
+}
+
+// createTablesInMysqlSchema creates the database mysql and the views or tables.
+func createTablesInMysqlSchema(ctx context.Context, tenant *TenantInfo, pu *config.ParameterUnit) error {
+	var err error
+	var initSysViewSqls []string
+
+	addSqlIntoSet := func(sql string) {
+		initSysViewSqls = append(initSysViewSqls, sql)
+	}
+
+	addSqlIntoSet("create database mysql;")
+	addSqlIntoSet("use mysql;")
+
+	//create tables for the tenant
+	for _, sql := range createMysqlSysTableSql {
+		addSqlIntoSet(sql)
+	}
+
+	guestMMu := guest.New(pu.SV.GuestMmuLimitation, pu.HostMmu)
+	bh := NewBackgroundHandler(ctx, guestMMu, pu.Mempool, pu)
+	defer bh.Close()
+
+	for _, sql := range initSysViewSqls {
+		err = bh.Exec(ctx, sql)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func checkTenantExistsOrNot(ctx context.Context, pu *config.ParameterUnit, userName string) (bool, error) {
