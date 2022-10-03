@@ -1426,6 +1426,64 @@ var (
 			input: `create table t2 (a uuid primary key, b varchar(10))`,
 		}, {
 			input: `create table t3 (a int, b uuid, primary key idx (a, b))`,
+		}, {
+			input:  `VALUES ROW(1,-2,3), ROW(5,7,9), ROW(4,6,8)`,
+			output: `values row(1, -2, 3), row(5, 7, 9), row(4, 6, 8)`,
+		}, {
+			input:  `VALUES ROW(5,7,9), ROW(1,2,3), ROW(9,10,11) ORDER BY column_1`,
+			output: `values row(5, 7, 9), row(1, 2, 3), row(9, 10, 11) order by column_1`,
+		},
+		{
+			input:  `VALUES ROW(5,7,9), ROW(1,2,3), ROW(9,10,11) ORDER BY column_1 LIMIT 2`,
+			output: `values row(5, 7, 9), row(1, 2, 3), row(9, 10, 11) order by column_1 limit 2`,
+		},
+		{
+			input:  `select * from unnest("a") as f`,
+			output: `select * from unnest(a, $, false) as f`,
+		},
+		{
+			input:  `select * from unnest("a", "b") as f`,
+			output: `select * from unnest(a, b, false) as f`,
+		},
+		{
+			input:  `select * from unnest("a", "b", true) as f`,
+			output: `select * from unnest(a, b, true) as f`,
+		},
+		{
+			input:  `select * from unnest("a")`,
+			output: `select * from unnest(a, $, false)`,
+		},
+		{
+			input:  `select * from unnest("a", "b")`,
+			output: `select * from unnest(a, b, false)`,
+		},
+		{
+			input:  `select * from unnest("a", "b", true)`,
+			output: `select * from unnest(a, b, true)`,
+		},
+		{
+			input:  `select * from unnest(t.a)`,
+			output: `select * from unnest(t.a, $, false)`,
+		},
+		{
+			input:  `select * from unnest(t.a, "$.b")`,
+			output: `select * from unnest(t.a, $.b, false)`,
+		},
+		{
+			input:  `select * from unnest(t.a, "$.b", true)`,
+			output: `select * from unnest(t.a, $.b, true)`,
+		},
+		{
+			input:  `select * from unnest(t.a) as f`,
+			output: `select * from unnest(t.a, $, false) as f`,
+		},
+		{
+			input:  `select * from unnest(t.a, "$.b") as f`,
+			output: `select * from unnest(t.a, $.b, false) as f`,
+		},
+		{
+			input:  `select * from unnest(t.a, "$.b", true) as f`,
+			output: `select * from unnest(t.a, $.b, true) as f`,
 		},
 	}
 )

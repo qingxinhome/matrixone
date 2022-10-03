@@ -321,6 +321,9 @@ import (
 //JSON function
 %token <str> JSON_EXTRACT
 
+// JSON table function
+%token <str> UNNEST
+
 // Insert
 %token <str> ROW OUTFILE HEADER MAX_FILE_SIZE FORCE_QUOTE
 
@@ -345,6 +348,9 @@ import (
 %type <statement> load_data_stmt import_data_stmt
 %type <statement> analyze_stmt
 %type <statement> prepare_stmt prepareable_stmt deallocate_stmt execute_stmt
+%type <statement> values_stmt
+%type <rowsExprs> row_constructor_list
+%type <exprs>  row_constructor
 %type <exportParm> export_data_param_opt
 %type <loadParam> load_param_opt load_param_opt_2
 %type <tailParam> tail_param_opt
@@ -354,7 +360,7 @@ import (
 %type <selectExprs> select_expression_list
 %type <selectExpr> select_expression
 %type <tableExprs> table_references table_name_wild_list
-%type <tableExpr> table_reference table_factor join_table into_table_name escaped_table_reference
+%type <tableExpr> table_reference table_factor join_table into_table_name escaped_table_reference table_function
 %type <direction> asc_desc_opt
 %type <order> order
 %type <orderBy> order_list order_by_clause order_by_opt
@@ -574,6 +580,7 @@ stmt:
 |   grant_stmt
 |   load_data_stmt
 |   import_data_stmt
+|   values_stmt
 |   select_stmt
     {
         $$ = $1
@@ -3333,6 +3340,32 @@ outer_join:
         $$ = tree.JOIN_TYPE_RIGHT
     }
 
+values_stmt:
+    VALUES row_constructor_list order_by_opt limit_opt
+    {
+        $$ = &tree.ValuesStatement{
+            Rows: $2,
+            OrderBy: $3,
+            Limit: $4,
+        }
+    }
+
+row_constructor_list:
+    row_constructor
+    {
+        $$ = []tree.Exprs{$1}
+    }
+|   row_constructor_list ',' row_constructor
+    {
+        $$ = append($1, $3)
+    }
+
+row_constructor:
+    ROW '(' data_values ')'
+    {
+        $$ = $3
+    }
+
 on_expression_opt:
     %prec JOIN
     {
@@ -3408,6 +3441,19 @@ table_factor:
             },
         }
     }
+|   table_function as_opt_id
+    {
+    	if $2 != "" {
+    		$$ = &tree.AliasedTableExpr{
+    			Expr: $1,
+    			As: tree.AliasClause{
+    				Alias: tree.Identifier($2),
+    			},
+    		}
+    	} else {
+    		$$ = $1
+    	}
+    }
 // |   '(' table_references ')'
 
 derived_table:
@@ -3415,6 +3461,132 @@ derived_table:
     {
         $$ = &tree.ParenTableExpr{Expr: $2}
     }
+
+table_function:
+    UNNEST '(' STRING ')'
+    {
+        a1 := $3
+        a2 := "$"
+        a3 := false
+        $$ = &tree.Unnest{
+        	Param: &tree.UnnestParam{
+			Origin: a1,
+			Path: a2,
+			Outer: a3,
+		},
+       	}
+    }
+|   UNNEST '(' STRING ',' STRING ')'
+    {
+	a1 := $3
+	a2 := "$"
+	if len($5) > 0 {
+       	    a2 = $5
+        }
+        a3 := false
+	$$ = &tree.Unnest{
+                Param: &tree.UnnestParam{
+        		Origin: a1,
+        		Path: a2,
+        		Outer: a3,
+        	},
+        }
+    }
+|   UNNEST '(' STRING ',' STRING ',' TRUE ')'
+    {
+    	a1 := $3
+    	a2 := "$"
+        if len($5) > 0 {
+            a2 = $5
+        }
+	a3 := true
+	$$ = &tree.Unnest{
+                Param: &tree.UnnestParam{
+        		Origin: a1,
+        		Path: a2,
+        		Outer: a3,
+        	},
+        }
+    }
+|   UNNEST '(' STRING ',' STRING ',' FALSE ')'
+    {
+    	a1 := $3
+    	a2 := "$"
+    	if len($5) > 0 {
+            a2 = $5
+        }
+    	a3 := false
+    	$$ = &tree.Unnest{
+		Param: &tree.UnnestParam{
+			Origin: a1,
+			Path: a2,
+			Outer: a3,
+		},
+	}
+    }
+|   UNNEST '(' column_name ')'
+    {
+    	a1 := $3
+    	a2 := "$"
+    	a3 := false
+    	$$ = &tree.Unnest{
+		Param: &tree.UnnestParam{
+			Origin: a1,
+			Path: a2,
+			Outer: a3,
+		},
+	}
+    }
+|   UNNEST '(' column_name ',' STRING ')'
+    {
+    	a1 := $3
+    	a2 := "$"
+    	if len($5) > 0 {
+    	    a2 = $5
+    	}
+    	a3 := false
+    	$$ = &tree.Unnest{
+    		Param: &tree.UnnestParam{
+    			Origin: a1,
+    			Path: a2,
+   			Outer: a3,
+    		},
+    	}
+    }
+|   UNNEST '(' column_name ',' STRING ',' TRUE ')'
+    {
+    	a1 := $3
+    	a2 := "$"
+    	if len($5) > 0 {
+    	    a2 = $5
+    	}
+    	a3 := true
+    	$$ = &tree.Unnest{
+    		Param: &tree.UnnestParam{
+    			Origin: a1,
+    			Path: a2,
+    			Outer: a3,
+    		},
+    	}
+    }
+|   UNNEST '(' column_name ',' STRING ',' FALSE ')'
+    {
+    	a1 := $3
+    	a2 := "$"
+    	if len($5) > 0 {
+    	    a2 = $5
+    	}
+    	a3 := false
+    	$$ = &tree.Unnest{
+    		Param: &tree.UnnestParam{
+    			Origin: a1,
+    			Path: a2,
+    			Outer: a3,
+    		},
+    	}
+    }
+
+
 
 as_opt:
     {}
@@ -7363,6 +7535,7 @@ func_not_keyword:
 |   SUBDATE
 |   SYSTEM_USER
 |   TRANSLATE
+|   UNNEST
 
 not_keyword:
     ADDDATE
