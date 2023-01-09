@@ -840,6 +840,8 @@ message CreateTable {
 	repeated string fk_tables = 7;
 	// we need column name when create table, but not in ForeignKeyDef
 	repeated FkColName fk_cols = 8;
+	string pk_col_name = 9;
+	repeated ColDef pk_parts = 10;
 }
 
 message AlterTable {

@@ -572,22 +572,34 @@ func buildTableDefs(stmt *tree.CreateTable, ctx CompilerContext, createTable *pl
 
 	pkeyName := ""
 	if len(primaryKeys) > 0 {
-		for _, primaryKey := range primaryKeys {
-			if _, ok := colMap[primaryKey]; !ok {
+		pkParts := make([]*ColDef, len(primaryKeys))
+		for i, primaryKey := range primaryKeys {
+			if coldef, ok := colMap[primaryKey]; !ok {
 				return moerr.NewInvalidInput(ctx.GetContext(), "column '%s' doesn't exist in table", primaryKey)
+			} else {
+				pkParts[i] = coldef
 			}
 		}
 		if len(primaryKeys) == 1 {
 			pkeyName = primaryKeys[0]
-			createTable.TableDef.Defs = append(createTable.TableDef.Defs, &plan.TableDef_DefType{
-				Def: &plan.TableDef_DefType_Pk{
-					Pk: &plan.PrimaryKeyDef{
-						Names: primaryKeys,
-					},
-				},
-			})
+			for _, col := range createTable.TableDef.Cols {
+				if col.Name == pkeyName {
+					col.Primary = true
+					//createTable.TableDef.Pkey = &plan.PrimaryKeyDef{
+					//	Cols:      []uint64{uint64(pos)},
+					//	PkeyColId: uint64(pos),
+					//}
+					break
+				}
+			}
+			createTable.PkColName = pkeyName
+			createTable.PkParts = pkParts
 		} else {
-			pkeyName = util.BuildCompositePrimaryKeyColumnName(primaryKeys)
+			// Combined Primary Key
+			pkeyName, err := BuildComPriKeyColumnName(primaryKeys)
+			if err != nil {
+				return moerr.NewNotSupported(ctx.GetContext(), fmt.Sprintf("Error in constructing composite primary key name for table %s", stmt.Table))
+			}
 			colDef := &ColDef{
 				Name: pkeyName,
 				Alg:  plan.CompressType_Lz4,
@@ -601,16 +613,27 @@ func buildTableDefs(stmt *tree.CreateTable, ctx CompilerContext, createTable *pl
 					Expr:         nil,
 					OriginString: "",
 				},
+				Primary: true,
 			}
 			createTable.TableDef.Cols = append(createTable.TableDef.Cols, colDef)
 			colMap[pkeyName] = colDef
-			createTable.TableDef.Defs = append(createTable.TableDef.Defs, &plan.TableDef_DefType{
-				Def: &plan.TableDef_DefType_Pk{
-					Pk: &plan.PrimaryKeyDef{
-						Names: []string{pkeyName},
-					},
-				},
-			})
+
+			//pkeyDef := &plan.PrimaryKeyDef{
+			//	Cols:      make([]uint64, len(primaryKeys)),
+			//	PkeyColId: uint64(len(createTable.TableDef.Cols) - 1),
+			//}
+			//for i, keyname := range primaryKeys {
+			//	for pos, col := range createTable.TableDef.Cols {
+			//		if keyname == col.Name {
+			//			pkeyDef.Cols[i] = uint64(pos)
+			//			break
+			//		}
+			//	}
+			//}
+
+			createTable.PkColName = pkeyName
+			createTable.PkParts = pkParts
+			//createTable.TableDef.Pkey = pkeyDef
 		}
 	}
 
@@ -630,6 +653,8 @@ func buildTableDefs(stmt *tree.CreateTable, ctx CompilerContext, createTable *pl
 
 	// build index table
 	if len(indexInfos) != 0 {
+		// The primary key definition needs to be passed in in the future
+		//err := buildUniqueIndexTable(createTable, indexInfos, colMap, createTable.TableDef.Pkey, ctx)
 		err := buildUniqueIndexTable(createTable, indexInfos, colMap, pkeyName, ctx)
 		if err != nil {
 			return err

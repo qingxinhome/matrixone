@@ -138,16 +138,22 @@ func buildShowCreateTable(stmt *tree.ShowCreateTable, ctx CompilerContext) (*Pla
 		}
 		createStr += fmt.Sprintf("`%s` %s %s%s%s", colName, typeStr, nullOrNot, updateOpt, hasAttrComment)
 		rowCount++
-		if col.Primary {
-			pkDefs = append(pkDefs, colName)
-		}
+		//if col.Primary {
+		//	pkDefs = append(pkDefs, colName)
+		//}
 		if col.ClusterBy {
 			cbDef = col.Name
 		}
 	}
-	if tableDef.CompositePkey != nil {
-		pkDefs = append(pkDefs, util.SplitCompositePrimaryKeyColumnName(tableDef.CompositePkey.Name)...)
+	//if tableDef.CompositePkey != nil {
+	//	pkDefs = append(pkDefs, util.SplitCompositePrimaryKeyColumnName(tableDef.CompositePkey.Name)...)
+	//}
+	if tableDef.Pkey != nil {
+		for _, idx := range tableDef.Pkey.Cols {
+			pkDefs = append(pkDefs, tableDef.Cols[idx].Name)
+		}
 	}
+
 	if len(pkDefs) != 0 {
 		pkStr := "PRIMARY KEY ("
 		for i, def := range pkDefs {

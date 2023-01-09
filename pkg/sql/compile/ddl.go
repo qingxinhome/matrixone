@@ -150,6 +150,40 @@ func (s *Scope) CreateTable(c *Compile) error {
 		return err
 	}
 
+	// get primary key define information and append primary key to table define
+	if len(qry.PkParts) > 0 {
+		newRelation, err := dbSource.Relation(c.ctx, tblName)
+		if err != nil {
+			return err
+		}
+		newTableDefs, err := newRelation.TableDefs(c.ctx)
+		if err != nil {
+			return err
+		}
+		var colNameToId = make(map[string]uint64)
+		for _, def := range newTableDefs {
+			if attr, ok := def.(*engine.AttributeDef); ok {
+				colNameToId[attr.Attr.Name] = attr.Attr.ID
+			}
+		}
+		primaryKeyDef := &plan.PrimaryKeyDef{
+			Cols:      make([]uint64, len(qry.PkParts)),
+			PkeyColId: colNameToId[qry.PkColName],
+		}
+		for i, part := range qry.PkParts {
+			primaryKeyDef.Cols[i] = colNameToId[part.Name]
+		}
+
+		newCt, err := makeNewCreateConstraint(nil, &engine.PrimaryKeyDef{primaryKeyDef})
+		if err != nil {
+			return err
+		}
+		err = newRelation.UpdateConstraint(c.ctx, newCt)
+		if err != nil {
+			return err
+		}
+	}
+
 	fkDbs := qry.GetFkDbs()
 	if len(fkDbs) > 0 {
 		fkTables := qry.GetFkTables()
@@ -161,39 +195,39 @@ func (s *Scope) CreateTable(c *Compile) error {
 
 		// for now ColumnId is equal ColumnIndex, and we have a bug to UpdateConstraint after created immediately
 		// so i comment these codes. if you want to remove these code, let @ouyuanning known.
-		// newTableDef, err := newRelation.TableDefs(c.ctx)
-		// if err != nil {
-		// 	return err
-		// }
-		// var colNameToId = make(map[string]uint64)
-		// for _, def := range newTableDef {
-		// 	if attr, ok := def.(*engine.AttributeDef); ok {
-		// 		colNameToId[attr.Attr.Name] = attr.Attr.ID
-		// 	}
-		// }
-		// newFkeys := make([]*plan.ForeignKeyDef, len(qry.GetTableDef().Fkeys))
-		// for i, fkey := range qry.GetTableDef().Fkeys {
-		// 	newDef := &plan.ForeignKeyDef{
-		// 		Name:        fkey.Name,
-		// 		Cols:        make([]uint64, len(fkey.Cols)),
-		// 		ForeignTbl:  fkey.ForeignTbl,
-		// 		ForeignCols: make([]uint64, len(fkey.ForeignCols)),
-		// 		OnDelete:    fkey.OnDelete,
-		// 		OnUpdate:    fkey.OnUpdate,
-		// 	}
-		// 	copy(newDef.ForeignCols, fkey.ForeignCols)
-		// 	for idx, colName := range qry.GetFkCols()[i].Cols {
-		// 		newDef.Cols[idx] = colNameToId[colName]
-		// 	}
-		// 	newFkeys[i] = newDef
-		// }
-		// newCt, err := makeNewCreateConstraint(nil, &engine.ForeignKeyDef{
-		// 	Fkeys: newFkeys,
-		// })
-		// if err != nil {
-		// 	return err
-		// }
-		// err = newRelation.UpdateConstraint(c.ctx, newCt)
+		//newTableDef, err := newRelation.TableDefs(c.ctx)
+		//if err != nil {
+		//	return err
+		//}
+		//var colNameToId = make(map[string]uint64)
+		//for _, def := range newTableDef {
+		//	if attr, ok := def.(*engine.AttributeDef); ok {
+		//		colNameToId[attr.Attr.Name] = attr.Attr.ID
+		//	}
+		//}
+		//newFkeys := make([]*plan.ForeignKeyDef, len(qry.GetTableDef().Fkeys))
+		//for i, fkey := range qry.GetTableDef().Fkeys {
+		//	newDef := &plan.ForeignKeyDef{
+		//		Name:        fkey.Name,
+		//		Cols:        make([]uint64, len(fkey.Cols)),
+		//		ForeignTbl:  fkey.ForeignTbl,
+		//		ForeignCols: make([]uint64, len(fkey.ForeignCols)),
+		//		OnDelete:    fkey.OnDelete,
+		//		OnUpdate:    fkey.OnUpdate,
+		//	}
+		//	copy(newDef.ForeignCols, fkey.ForeignCols)
+		//	for idx, colName := range qry.GetFkCols()[i].Cols {
+		//		newDef.Cols[idx] = colNameToId[colName]
+		//	}
+		//	newFkeys[i] = newDef
+		//}
+		//newCt, err := makeNewCreateConstraint(nil, &engine.ForeignKeyDef{
+		//	Fkeys: newFkeys,
+		//})
+		//if err != nil {
+		//	return err
+		//}
+		//err = newRelation.UpdateConstraint(c.ctx, newCt)
 		// if err != nil {
 		// 	return err
 		// }
@@ -747,10 +781,10 @@ func planDefsToExeDefs(tableDef *plan.TableDef) ([]engine.TableDef, error) {
 			exeDefs = append(exeDefs, &engine.ClusterByDef{
 				Name: defVal.Cb.Name,
 			})
-		case *plan.TableDef_DefType_Pk:
-			exeDefs = append(exeDefs, &engine.PrimaryIndexDef{
-				Names: defVal.Pk.GetNames(),
-			})
+		//case *plan.TableDef_DefType_Pk:
+		//	exeDefs = append(exeDefs, &engine.PrimaryIndexDef{
+		//		Names: defVal.Pk.GetNames(),
+		//	})
 		case *plan.TableDef_DefType_Properties:
 			properties := make([]engine.Property, len(defVal.Properties.GetProperties()))
 			for i, p := range defVal.Properties.GetProperties() {
@@ -804,6 +838,12 @@ func planDefsToExeDefs(tableDef *plan.TableDef) ([]engine.TableDef, error) {
 	if len(tableDef.RefChildTbls) > 0 {
 		c.Cts = append(c.Cts, &engine.RefChildTableDef{
 			Tables: tableDef.RefChildTbls,
+		})
+	}
+
+	if tableDef.Pkey != nil {
+		c.Cts = append(c.Cts, &engine.PrimaryKeyDef{
+			tableDef.Pkey,
 		})
 	}
 

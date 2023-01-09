@@ -61,6 +61,7 @@ type OrderBySpec = plan.OrderBySpec
 type CreateTable_FkColName = plan.CreateTable_FkColName
 type ForeignKeyDef = plan.ForeignKeyDef
 type ClusterTable = plan.ClusterTable
+type PrimaryKeyDef = plan.PrimaryKeyDef
 
 type CompilerContext interface {
 	// Default database/schema in context

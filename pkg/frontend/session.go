@@ -1843,6 +1843,7 @@ func (tcc *TxnCompilerContext) getTableDef(ctx context.Context, table engine.Rel
 	var viewSql *plan2.ViewDef
 	var foreignKeys []*plan2.ForeignKeyDef
 	var refChildTbls []uint64
+	var primarykey *plan2.PrimaryKeyDef
 	for _, def := range engineDefs {
 		if attr, ok := def.(*engine.AttributeDef); ok {
 			isCPkey := util.JudgeIsCompositePrimaryKeyColumn(attr.Attr.Name)
@@ -1916,6 +1917,8 @@ func (tcc *TxnCompilerContext) getTableDef(ctx context.Context, table engine.Rel
 					foreignKeys = k.Fkeys
 				case *engine.RefChildTableDef:
 					refChildTbls = k.Tables
+				case *engine.PrimaryKeyDef:
+					primarykey = k.Pkey
 				}
 			}
 		} else if commnetDef, ok := def.(*engine.CommentDef); ok {
@@ -1977,6 +1980,7 @@ func (tcc *TxnCompilerContext) getTableDef(ctx context.Context, table engine.Rel
 		Defs:          defs,
 		TableType:     TableType,
 		Createsql:     Createsql,
+		Pkey:          primarykey,
 		CompositePkey: CompositePkey,
 		ViewSql:       viewSql,
 		Fkeys:         foreignKeys,
