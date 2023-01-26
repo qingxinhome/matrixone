@@ -394,7 +394,7 @@ func bindFuncExprImplByPlanExpr(ctx context.Context, name string, args []*plan.E
 	var returnType types.Type
 	var argsCastType []types.Type
 
-	funcId, returnType, argsCastType, err := function.GetFunctionByName(name, argsType)
+	funcId, returnType, argsCastType, err = function.GetFunctionByName(ctx, name, argsType)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func bindFuncExprImplByPlanExpr(ctx context.Context, name string, args []*plan.E
 					tempType := types.T(args[1].Typ.Id).ToType()
 					argsCastType = []types.Type{tempType, tempType}
 					// need to update function id
-					funcId, _, _, err := function.GetFunctionByName(ctx, name, argsCastType)
+					funcId, _, _, err = function.GetFunctionByName(ctx, name, argsCastType)
 					if err != nil {
 						return nil, err
 					}

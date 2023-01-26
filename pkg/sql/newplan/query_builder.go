@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/matrixorigin/matrixone/pkg/catalog"
 	"github.com/matrixorigin/matrixone/pkg/common/moerr"
+	"github.com/matrixorigin/matrixone/pkg/container/types"
 	"github.com/matrixorigin/matrixone/pkg/pb/plan"
 	"github.com/matrixorigin/matrixone/pkg/sql/parsers/dialect"
 	"github.com/matrixorigin/matrixone/pkg/sql/parsers/tree"
@@ -173,8 +174,30 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 	}
 
 	// handle where clause
+	bindcontext.binder = NewWhereBinder(builder, bindcontext)
 	if clause.Where != nil {
-		panic("unimplement")
+		whereList, err := splitAndBindCondition(clause.Where.Expr, bindcontext)
+		if err != nil {
+			return -1, err
+		}
+
+		var expr *plan.Expr
+		var filterList []*plan.Expr
+		//do nothing in tpch.q1
+		for _, condition := range whereList {
+			nodeId, expr, err = builder.flattenSubqueries(nodeId, condition, bindcontext)
+			if err != nil {
+				return -1, err
+			}
+			if expr != nil {
+				filterList = append(filterList, expr)
+			}
+		}
+		nodeId = builder.appendNode(&plan.Node{
+			NodeType:   plan.Node_FILTER,
+			Children:   []int32{nodeId},
+			FilterList: filterList,
+		}, bindcontext)
 	}
 
 	//------------------------------------------------------------------------------------------------------------
@@ -283,6 +306,29 @@ func (builder *QueryBuilder) buildJoinTable(joinTableExpr *tree.JoinTableExpr, b
 	return -1, nil
 }
 
+func (builder *QueryBuilder) flattenSubqueries(nodeId int32, expr *plan.Expr, bindcontext *BindContext) (int32, *plan.Expr, error) {
+	var err error
+	switch exprImpl := expr.Expr.(type) {
+	case *plan.Expr_F:
+		for i, arg := range exprImpl.F.Args {
+			nodeId, exprImpl.F.Args[i], err = builder.flattenSubqueries(nodeId, arg, bindcontext)
+			if err != nil {
+				return -1, nil, err
+			}
+		}
+	case *plan.Expr_Sub:
+		nodeId, expr, err = builder.flattenSubquery(nodeId, exprImpl.Sub, bindcontext)
+		if err != nil {
+			return -1, nil, err
+		}
+	}
+	return nodeId, expr, err
+}
+
+func (builder *QueryBuilder) flattenSubquery(nodeId int32, subquery *plan.SubqueryRef, bindcontext *BindContext) (int32, *plan.Expr, error) {
+	return 0, nil, moerr.NewInternalError(bindcontext.binder.GetContext(), "flattenSubquery is not implemented")
+}
+
 func (builder *QueryBuilder) appendNode(node *plan.Node, bindcontext *BindContext) int32 {
 	nodeId := int32(len(builder.qry.Nodes))
 	node.NodeId = nodeId
@@ -295,4 +341,46 @@ func (builder *QueryBuilder) appendNode(node *plan.Node, bindcontext *BindContex
 func (builder *QueryBuilder) genNewTag() int32 {
 	builder.nextTag++
 	return builder.nextTag
+}
+
+func splitAndBindCondition(astExpr tree.Expr, bindContext *BindContext) ([]*plan.Expr, error) {
+	conjuncts := splitAstConjunction(astExpr)
+	exprs := make([]*plan.Expr, len(conjuncts))
+
+	for i, conjunct := range conjuncts {
+		conjunctExpr, err := bindContext.qualifyColumnNames(conjunct, nil, false)
+		if err != nil {
+			return nil, err
+		}
+		expr, err := bindContext.binder.BindExpr(conjunctExpr, 0, true)
+		if err != nil {
+			return nil, err
+		}
+		if expr.GetSub() == nil {
+			//add CAST
+			expr, err = makePlan2CastExpr(bindContext.binder.GetContext(), expr, &plan.Type{
+				Id: int32(types.T_bool),
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+		exprs[i] = expr
+	}
+	return exprs, nil
+}
+
+func splitAstConjunction(astExpr tree.Expr) []tree.Expr {
+	var exprs []tree.Expr
+	switch expr := astExpr.(type) {
+	case nil:
+	case *tree.AndExpr:
+		exprs = append(exprs, splitAstConjunction(expr.Left)...)
+		exprs = append(exprs, splitAstConjunction(expr.Right)...)
+	case *tree.ParenExpr:
+		exprs = append(exprs, splitAstConjunction(expr.Expr)...)
+	default:
+		exprs = append(exprs, expr)
+	}
+	return exprs
 }

@@ -132,3 +132,49 @@ func makePlan2NullConstExpr() *plan.Expr {
 		},
 	}
 }
+
+func makePlan2CastExpr(ctx context.Context, expr *plan.Expr, destType *plan.Type) (*plan.Expr, error) {
+	if isSameColumnType(expr.Typ, destType) {
+		return expr, nil
+	}
+	destType.NotNullable = expr.Typ.NotNullable
+	if types.T(expr.Typ.Id) == types.T_any {
+		expr.Typ = destType
+		return expr, nil
+	}
+	type1 := makeTypeByPlan2Expr(expr)
+	type2 := makeTypeByPlan2Type(destType)
+
+	funcId, _, _, err := function.GetFunctionByName(ctx, "cast", []types.Type{type1, type2})
+	if err != nil {
+		return nil, err
+	}
+	destExpr := &plan.Expr{
+		Expr: &plan.Expr_T{
+			T: &plan.TargetType{
+				Typ: destType,
+			},
+		},
+	}
+	return &plan.Expr{
+		Expr: &plan.Expr_F{
+			F: &plan.Function{
+				Func: getFunctionObjRef(funcId, "cast"),
+				Args: []*plan.Expr{expr, destExpr},
+			},
+		},
+		Typ: destType,
+	}, nil
+}
+
+func isSameColumnType(type1 *plan.Type, type2 *plan.Type) bool {
+	if type1.Id == type2.Id {
+		if type1.Width == type2.Width &&
+			type1.Size == type2.Size &&
+			type1.Precision == type2.Precision &&
+			type1.Scale == type2.Scale {
+			return true
+		}
+	}
+	return false
+}
