@@ -168,7 +168,6 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 			})
 		}
 	}
-
 	if len(selectList) == 0 {
 		return -1, moerr.NewSyntaxError(builder.GetContext(), "No tables used")
 	}
@@ -208,7 +207,18 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 
 	// handle group by clause
 	if clause.GroupBy != nil {
-		panic("unimplement")
+		groupBinder := NewGroupBinder(builder, bindcontext)
+		for _, groupExpr := range clause.GroupBy {
+			groupExpr, err = bindcontext.qualifyColumnNames(groupExpr, nil, false)
+			if err != nil {
+				return -1, err
+			}
+
+			_, err = groupBinder.BindExpr(groupExpr, 0, true)
+			if err != nil {
+				return -1, err
+			}
+		}
 	}
 
 	// handle having clause

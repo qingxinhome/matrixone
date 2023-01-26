@@ -46,6 +46,7 @@ type WhereBinder struct {
 type GroupBinder struct {
 	baseBinder
 }
+
 type HavingBinder struct {
 	baseBinder
 	insideAgg bool
@@ -101,6 +102,10 @@ type BindContext struct {
 	groupTag     int32
 	aggregateTag int32
 	projectTag   int32
+
+	//groupByExpr -> the index of bound groupByExpr
+	groupByAst map[string]int32
+	groups     []*plan.Expr
 
 	// true, when return result is a single row, such as('dual' or without From or without groupby but with aggregates)
 	hasSingleRow bool
