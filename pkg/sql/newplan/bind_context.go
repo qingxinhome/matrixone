@@ -24,6 +24,7 @@ func NewBindContext(parent *BindContext) *BindContext {
 		bindingByCol:   make(map[string]*Binding),
 		aliasMap:       make(map[string]int32),
 		groupByAst:     make(map[string]int32),
+		aggregateByAst: make(map[string]int32),
 	}
 	fmt.Println("NewBindContext:", bindContext.id)
 	if parent != nil {

@@ -107,6 +107,10 @@ type BindContext struct {
 	groupByAst map[string]int32
 	groups     []*plan.Expr
 
+	// aggregateByExpr -> the index of bound aggregateByExpr
+	aggregateByAst map[string]int32
+	aggregates     []*plan.Expr
+
 	// true, when return result is a single row, such as('dual' or without From or without groupby but with aggregates)
 	hasSingleRow bool
 }

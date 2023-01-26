@@ -222,8 +222,14 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 	}
 
 	// handle having clause
+	var havingList []*plan.Expr
+	havingBinder := NewHavingBinder(builder, bindcontext)
 	if clause.Having != nil {
-		panic("unimplement")
+		bindcontext.binder = havingBinder
+		havingList, err = splitAndBindCondition(clause.Having.Expr, bindcontext)
+		if err != nil {
+			return -1, err
+		}
 	}
 
 	return -1, nil
