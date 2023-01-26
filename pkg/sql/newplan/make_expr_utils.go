@@ -118,3 +118,17 @@ func makePlan2Type(typ *types.Type) *plan.Type {
 		Scale:     typ.Scale,
 	}
 }
+
+func makePlan2NullConstExpr() *plan.Expr {
+	return &plan.Expr{
+		Expr: &plan.Expr_C{
+			C: &plan.Const{
+				Isnull: true,
+			},
+		},
+		Typ: &plan.Type{
+			Id:          int32(types.T_any),
+			NotNullable: false,
+		},
+	}
+}

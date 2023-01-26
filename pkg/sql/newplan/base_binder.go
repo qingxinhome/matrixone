@@ -436,7 +436,38 @@ func bindFuncExprImplByPlanExpr(ctx context.Context, name string, args []*plan.E
 		return nil, moerr.NewInternalError(ctx, "not implement bindFuncExprImplByPlanExpr 10")
 	}
 
-	return nil, err
+	if len(argsCastType) != 0 {
+		if len(argsCastType) != argsNum {
+			return nil, moerr.NewInvalidArg(ctx, "cast types length not match args length", "")
+		}
+		for i, castType := range argsCastType {
+			if !argsType[i].Eq(castType) && castType.Oid != types.T_any {
+				destType := makePlan2Type(&castType)
+				args[i], err = appendCastBeforeExpr(ctx, args[i], destType)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	if function.GetFunctionAppendHideArgByID(funcId) {
+		args = append(args, makePlan2NullConstExpr())
+	}
+
+	retType := makePlan2Type(&returnType)
+	retType.NotNullable = function.DeduceNotNullable(funcId, args)
+
+	return &plan.Expr{
+		Expr: &plan.Expr_F{
+			F: &plan.Function{
+				Func: getFunctionObjRef(funcId, name),
+				Args: args,
+			},
+		},
+		Typ: retType,
+	}, nil
+
 }
 
 func resetDateFunctionArgs(dateExpr *plan.Expr, intervalExpr *plan.Expr) ([]*plan.Expr, error) {
