@@ -112,8 +112,14 @@ type BindContext struct {
 	aggregateByAst map[string]int32
 	aggregates     []*plan.Expr
 
+	// bound project exprs from select exprs
+	projects      []*plan.Expr
+	projectByExpr map[string]int32
+
 	// true, when return result is a single row, such as('dual' or without From or without groupby but with aggregates)
 	hasSingleRow bool
+	// from selectClause.Distinct
+	isDistinct bool
 }
 
 // Node_TABLE_SCAN or Node_MATERIAL_SCAN or Node_EXTERNAL_SCAN or subquery mappings a 'Binding' instance

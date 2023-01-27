@@ -74,3 +74,39 @@ func TestBuild02(t *testing.T) {
 		convey.So(res, convey.ShouldBeTrue)
 	})
 }
+
+func TestBuild03(t *testing.T) {
+	convey.Convey("test03", t, func() {
+		sql := "select l_returnflag,l_linestatus,l_quantity,l_extendedprice,l_quantity,l_discount,l_tax from lineitem;"
+		res, err := executeSql(sql)
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(res, convey.ShouldBeTrue)
+	})
+}
+
+func TestBuild04(t *testing.T) {
+	convey.Convey("test04", t, func() {
+		sql := "select l_returnflag as a,l_linestatus as b,l_quantity as b,l_extendedprice as c,l_quantity as d,l_discount as e,l_tax as f from lineitem;"
+		res, err := executeSql(sql)
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(res, convey.ShouldBeTrue)
+	})
+}
+
+func TestBuild05(t *testing.T) {
+	convey.Convey("test05", t, func() {
+		sql := "select l_extendedprice * (1 - l_discount) from lineitem;"
+		res, err := executeSql(sql)
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(res, convey.ShouldBeTrue)
+	})
+}
+
+func TestBuild06(t *testing.T) {
+	convey.Convey("test06", t, func() {
+		sql := "select l_extendedprice * (1 - l_discount) * (1 + l_tax) from lineitem;"
+		res, err := executeSql(sql)
+		convey.So(err, convey.ShouldBeNil)
+		convey.So(res, convey.ShouldBeTrue)
+	})
+}

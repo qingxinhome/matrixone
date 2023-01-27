@@ -232,6 +232,45 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 		}
 	}
 
+	projectBinder := NewProjectionBinder(builder, bindcontext, havingBinder)
+	bindcontext.binder = projectBinder
+	for i, selectExpr := range selectList {
+		astExpr, err := bindcontext.qualifyColumnNames(selectExpr.Expr, nil, false)
+		if err != nil {
+			return -1, err
+		}
+		expr, err := projectBinder.BindExpr(astExpr, 0, true)
+		if err != nil {
+			return -1, err
+		}
+		key := [2]int32{bindcontext.projectTag, int32(i)}
+		builder.nameByColRef[key] = tree.String(astExpr, dialect.MYSQL)
+
+		projectAlias := string(selectExpr.As)
+		if len(projectAlias) > 0 {
+			bindcontext.aliasMap[projectAlias] = int32(len(bindcontext.projects))
+		}
+		bindcontext.projects = append(bindcontext.projects, expr)
+	}
+
+	resultLen := len(bindcontext.projects)
+	for i, project := range bindcontext.projects {
+		projectStr := project.String()
+		if _, ok := bindcontext.projectByExpr[projectStr]; !ok {
+			bindcontext.projectByExpr[projectStr] = int32(i)
+		}
+	}
+	bindcontext.isDistinct = clause.Distinct
+
+	var orderBys []*plan.OrderBySpec
+	if stmt.OrderBy != nil {
+
+	}
+
+	if stmt.Limit != nil {
+		
+	}
+
 	return -1, nil
 }
 
