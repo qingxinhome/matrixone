@@ -55,6 +55,7 @@ type ProjectionBinder struct {
 	baseBinder
 	havingBinder *HavingBinder
 }
+
 type OrderByBinder struct {
 	*ProjectionBinder
 	selectList tree.SelectExprs

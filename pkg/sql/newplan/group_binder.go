@@ -7,6 +7,9 @@ import (
 	"github.com/matrixorigin/matrixone/pkg/sql/parsers/tree"
 )
 
+// GroupBy does not have Agg,Win,Subquery
+// BindExpr -> need update ctx.groupByAst, ctx.groups
+// BindColRef -> no correlated columns
 func NewGroupBinder(builder *QueryBuilder, bindContext *BindContext) *GroupBinder {
 	groupBinder := &GroupBinder{}
 	groupBinder.builder = builder
@@ -15,7 +18,7 @@ func NewGroupBinder(builder *QueryBuilder, bindContext *BindContext) *GroupBinde
 	return groupBinder
 }
 
-func (groupBinder GroupBinder) BindExpr(expr tree.Expr, i int32, b bool) (*plan.Expr, error) {
+func (groupBinder *GroupBinder) BindExpr(expr tree.Expr, i int32, b bool) (*plan.Expr, error) {
 	planExpr, err := groupBinder.baseBindExpr(expr, i, b)
 	if err != nil {
 		return nil, err
@@ -32,7 +35,7 @@ func (groupBinder GroupBinder) BindExpr(expr tree.Expr, i int32, b bool) (*plan.
 	return planExpr, err
 }
 
-func (groupBinder GroupBinder) BindColRef(name *tree.UnresolvedName, i int32, b bool) (*plan.Expr, error) {
+func (groupBinder *GroupBinder) BindColRef(name *tree.UnresolvedName, i int32, b bool) (*plan.Expr, error) {
 	colExpr, err := groupBinder.baseBindColRef(name, i, b)
 	if err != nil {
 		return nil, err
@@ -44,14 +47,14 @@ func (groupBinder GroupBinder) BindColRef(name *tree.UnresolvedName, i int32, b 
 	return colExpr, nil
 }
 
-func (groupBinder GroupBinder) BindAggFunc(s string, expr *tree.FuncExpr, i int32, b bool) (*plan.Expr, error) {
+func (groupBinder *GroupBinder) BindAggFunc(s string, expr *tree.FuncExpr, i int32, b bool) (*plan.Expr, error) {
 	return nil, moerr.NewInvalidInput(groupBinder.GetContext(), "GROUP BY clause cannot contain aggregate functions")
 }
 
-func (groupBinder GroupBinder) BindWinFunc(s string, expr *tree.FuncExpr, i int32, b bool) (*plan.Expr, error) {
+func (groupBinder *GroupBinder) BindWinFunc(s string, expr *tree.FuncExpr, i int32, b bool) (*plan.Expr, error) {
 	return nil, moerr.NewInvalidInput(groupBinder.GetContext(), "GROUP BY clause cannot contain window functions")
 }
 
-func (groupBinder GroupBinder) BindSubquery(subquery *tree.Subquery, b bool) (*plan.Expr, error) {
+func (groupBinder *GroupBinder) BindSubquery(subquery *tree.Subquery, b bool) (*plan.Expr, error) {
 	return nil, moerr.NewNYI(groupBinder.GetContext(), "subquery in GROUP BY clause")
 }
