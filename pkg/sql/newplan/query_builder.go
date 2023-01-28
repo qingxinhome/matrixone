@@ -264,11 +264,41 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 
 	var orderBys []*plan.OrderBySpec
 	if stmt.OrderBy != nil {
+		// astOrderBy is different from selectList
+		// ast in astOrderBy have not been qualified.
+		orderbyBinder := NewOrderByBinder(projectBinder, selectList)
+		orderBys = make([]*plan.OrderBySpec, 0, len(stmt.OrderBy))
 
+		for _, order := range stmt.OrderBy {
+			expr, err := orderbyBinder.BindExpr(order.Expr)
+			if err != nil {
+				return -1, err
+			}
+
+			orderby := &plan.OrderBySpec{
+				Expr: expr,
+				Flag: plan.OrderBySpec_INTERNAL,
+			}
+
+			switch order.Direction {
+			case tree.Ascending:
+				orderby.Flag |= plan.OrderBySpec_ASC
+			case tree.Descending:
+				orderby.Flag |= plan.OrderBySpec_DESC
+			}
+
+			switch order.NullsPosition {
+			case tree.NullsFirst:
+				orderby.Flag |= plan.OrderBySpec_NULLS_FIRST
+			case tree.NullsLast:
+				orderby.Flag |= plan.OrderBySpec_NULLS_LAST
+			}
+			orderBys = append(orderBys, orderby)
+		}
 	}
 
 	if stmt.Limit != nil {
-		
+
 	}
 
 	return -1, nil
