@@ -21,6 +21,9 @@ import (
 	"github.com/matrixorigin/matrixone/pkg/sql/parsers/tree"
 )
 
+// GroupBy does not have Agg,Win,Subquery
+// BindExpr -> need update ctx.groupByAst, ctx.groups
+// BindColRef -> no correlated columns
 func NewGroupBinder(builder *QueryBuilder, ctx *BindContext) *GroupBinder {
 	b := &GroupBinder{}
 	b.sysCtx = builder.GetContext()

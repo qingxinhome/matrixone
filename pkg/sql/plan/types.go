@@ -62,6 +62,7 @@ type OrderBySpec = plan.OrderBySpec
 type CreateTable_FkColName = plan.CreateTable_FkColName
 type ForeignKeyDef = plan.ForeignKeyDef
 type ClusterTable = plan.ClusterTable
+type Query_StatementType = plan.Query_StatementType
 
 type CompilerContext interface {
 	// Default database/schema in context
@@ -211,6 +212,7 @@ type BindingTreeNode struct {
 	right *BindingTreeNode
 }
 
+// Binder 用于将ast表达式翻译成plan表达式
 type Binder interface {
 	BindExpr(tree.Expr, int32, bool) (*plan.Expr, error)
 	BindColRef(*tree.UnresolvedName, int32, bool) (*plan.Expr, error)
