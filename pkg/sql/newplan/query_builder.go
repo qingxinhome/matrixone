@@ -298,7 +298,26 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 	}
 
 	if stmt.Limit != nil {
+		limitBinder := NewLimitBinder(builder, bindcontext)
+		if stmt.Limit.Offset != nil {
+			offsetExpr, err := limitBinder.BindExpr(stmt.Limit.Offset, 0, true)
+			if err != nil {
+				return -1, err
+			}
+		}
 
+		if stmt.Limit.Count != nil {
+			limitExpr, err := limitBinder.BindExpr(stmt.Limit.Count, 0, true)
+			if err != nil {
+				return -1, err
+			}
+
+			if exprC, ok := limitExpr.Expr.(*plan.Expr_C); ok {
+				if c, ok2 := exprC.C.Value.(*plan.Const_I64Val); ok2 {
+					bindcontext.hasSingleRow = c.I64Val == 1
+				}
+			}
+		}
 	}
 
 	return -1, nil
