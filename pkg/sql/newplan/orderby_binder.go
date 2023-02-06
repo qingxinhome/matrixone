@@ -55,9 +55,39 @@ func (orderBinder *OrderByBinder) BindExpr(astExpr tree.Expr) (*plan.Expr, error
 		default:
 			return nil, moerr.NewSyntaxError(orderBinder.GetContext(), "non-integer constant int order by")
 		}
-
-		// TODO next .....
 	}
 
-	return nil, nil
+	// TODO next .....
+	// expand alias
+	// order by may use the alias in project list first
+	astExpr, err := orderBinder.bindContext.qualifyColumnNames(astExpr, orderBinder.selectList, true)
+	if err != nil {
+		return nil, err
+	}
+	expr, err := orderBinder.ProjectionBinder.BindExpr(astExpr, 0, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var colPos int32
+	var ok bool
+	exprStr := expr.String()
+	if colPos, ok = orderBinder.bindContext.projectByExpr[exprStr]; !ok {
+		if orderBinder.bindContext.isDistinct {
+			return nil, moerr.NewSyntaxError(orderBinder.GetContext(), "for SELECT DISTINCT, ORDER BY expressions must appear in select list")
+		}
+		colPos = int32(len(orderBinder.bindContext.projects))
+		orderBinder.bindContext.projectByExpr[exprStr] = colPos
+		orderBinder.bindContext.projects = append(orderBinder.bindContext.projects, expr)
+	}
+
+	return &plan.Expr{
+		Typ: orderBinder.bindContext.projects[colPos].Typ,
+		Expr: &plan.Expr_Col{
+			Col: &plan.ColRef{
+				RelPos: orderBinder.bindContext.projectTag,
+				ColPos: colPos,
+			},
+		},
+	}, err
 }
