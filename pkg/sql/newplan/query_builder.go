@@ -10,6 +10,7 @@ import (
 	"github.com/matrixorigin/matrixone/pkg/sql/parsers/dialect"
 	"github.com/matrixorigin/matrixone/pkg/sql/parsers/tree"
 	plan2 "github.com/matrixorigin/matrixone/pkg/sql/plan"
+	"strings"
 )
 
 func NewQueryBuilder(queryType plan.Query_StatementType, compilerContext plan2.CompilerContext) *QueryBuilder {
@@ -320,6 +321,72 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 		}
 	}
 
+	if (len(bindcontext.groups) > 0 || len(bindcontext.aggregates) > 0) && len(projectBinder.boundCols) > 0 {
+		mode, err := builder.compCtx.ResolveVariable("sql_mode", true, false)
+		if err != nil {
+			return -1, err
+		}
+
+		// ONLY_FULL_GROUP_BY -> sql中select后面的字段必须出现在group by后面，或者被聚合函数包裹，不然会抛出错误
+		if strings.Contains(mode.(string), "ONLY_FULL_GROUP_BY") {
+			// projectionBinder.boundCols 远宁，是用来做什么的，存的什么信息？
+			return -1, moerr.NewSyntaxError(builder.GetContext(), "column %q must appear in the GROUP BY clause or be used in an aggregate function", projectBinder.boundCols[0])
+		}
+	}
+
+	if len(bindcontext.groups) == 0 && len(bindcontext.aggregates) > 0 {
+		bindcontext.hasSingleRow = true
+	}
+
+	// with group or aggreate
+	if len(bindcontext.groups) > 0 || len(bindcontext.aggregates) > 0 {
+		newNode := &plan.Node{
+			NodeType:    plan.Node_AGG,
+			Children:    []int32{nodeId},
+			GroupBy:     bindcontext.groups,
+			AggList:     bindcontext.aggregates,
+			BindingTags: []int32{bindcontext.groupTag, bindcontext.aggregateTag},
+		}
+		nodeId = builder.appendNode(newNode, bindcontext)
+
+		if len(havingList) > 0 {
+			var newFilterList []*plan.Expr
+			var expr *plan.Expr
+
+			for _, cond := range havingList {
+				// having 子句中也可以有子查询吗?
+				nodeId, expr, err = builder.flattenSubqueries(nodeId, cond, bindcontext)
+				if err != nil {
+					return -1, err
+				}
+
+				if expr != nil {
+					newFilterList = append(newFilterList, expr)
+				}
+			}
+
+			node := &plan.Node{
+				NodeType:   plan.Node_FILTER,
+				Children:   []int32{nodeId},
+				FilterList: newFilterList,
+			}
+			nodeId = builder.appendNode(node, bindcontext)
+		}
+
+		for i, project := range bindcontext.projects {
+			nodeId, project, err = builder.flattenSubqueries(nodeId, project, bindcontext)
+			if err != nil {
+				return -1, err
+			}
+
+			if project == nil {
+				return -1, moerr.NewNYI(builder.GetContext(), "non-scalar subquery in SELECT clause")
+			}
+			bindcontext.projects[i] = project
+		}
+
+	}
+
 	return -1, nil
 }
 
@@ -410,6 +477,7 @@ func (builder *QueryBuilder) buildJoinTable(joinTableExpr *tree.JoinTableExpr, b
 	return -1, nil
 }
 
+// 展开子查询
 func (builder *QueryBuilder) flattenSubqueries(nodeId int32, expr *plan.Expr, bindcontext *BindContext) (int32, *plan.Expr, error) {
 	var err error
 	switch exprImpl := expr.Expr.(type) {
@@ -429,6 +497,7 @@ func (builder *QueryBuilder) flattenSubqueries(nodeId int32, expr *plan.Expr, bi
 	return nodeId, expr, err
 }
 
+// 展开子查询
 func (builder *QueryBuilder) flattenSubquery(nodeId int32, subquery *plan.SubqueryRef, bindcontext *BindContext) (int32, *plan.Expr, error) {
 	return 0, nil, moerr.NewInternalError(bindcontext.binder.GetContext(), "flattenSubquery is not implemented")
 }
