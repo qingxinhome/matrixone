@@ -104,15 +104,16 @@ type BindContext struct {
 	aggregateTag int32
 	projectTag   int32
 
-	//groupByExpr -> the index of bound groupByExpr
+	// groupByAstExpr(toString) -> the index of bound groupByExpr
 	groupByAst map[string]int32
 	groups     []*plan.Expr
 
-	// aggregateByExpr -> the index of bound aggregateByExpr
+	// aggregateByAstExpr(toString) -> the index of bound aggregateByExpr
 	aggregateByAst map[string]int32
 	aggregates     []*plan.Expr
 
 	// bound project exprs from select exprs
+	// bindContext的projects是在计划构建过程中,[查询结果的投影列] + [order by使用的列]的并集，
 	projects      []*plan.Expr
 	projectByExpr map[string]int32
 
@@ -120,6 +121,10 @@ type BindContext struct {
 	hasSingleRow bool
 	// from selectClause.Distinct
 	isDistinct bool
+
+	// queryBuilder.results是查询结果的投影列
+	results   []*plan.Expr
+	resultTag int32
 }
 
 // Node_TABLE_SCAN or Node_MATERIAL_SCAN or Node_EXTERNAL_SCAN or subquery mappings a 'Binding' instance
@@ -153,6 +158,6 @@ type QueryBuilder struct {
 	qry               *plan.Query
 	compCtx           plan2.CompilerContext
 	bindContextByNode []*BindContext
-	nameByColRef      map[[2]int32]string
+	nameByColRef      map[[2]int32]string // key: [tag, position],  value: ast string
 	nextTag           int32
 }

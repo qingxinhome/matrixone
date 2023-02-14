@@ -298,17 +298,19 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 		}
 	}
 
+	var limitExpr *plan.Expr
+	var offsetExpr *plan.Expr
 	if stmt.Limit != nil {
 		limitBinder := NewLimitBinder(builder, bindcontext)
 		if stmt.Limit.Offset != nil {
-			offsetExpr, err := limitBinder.BindExpr(stmt.Limit.Offset, 0, true)
+			offsetExpr, err = limitBinder.BindExpr(stmt.Limit.Offset, 0, true)
 			if err != nil {
 				return -1, err
 			}
 		}
 
 		if stmt.Limit.Count != nil {
-			limitExpr, err := limitBinder.BindExpr(stmt.Limit.Count, 0, true)
+			limitExpr, err = limitBinder.BindExpr(stmt.Limit.Count, 0, true)
 			if err != nil {
 				return -1, err
 			}
@@ -335,6 +337,7 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 	}
 
 	if len(bindcontext.groups) == 0 && len(bindcontext.aggregates) > 0 {
+		// true, when return result is a single row, such as('dual' or without From or without groupby but with aggregates)
 		bindcontext.hasSingleRow = true
 	}
 
@@ -349,6 +352,7 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 		}
 		nodeId = builder.appendNode(newNode, bindcontext)
 
+		// 展开having子句中的子查询
 		if len(havingList) > 0 {
 			var newFilterList []*plan.Expr
 			var expr *plan.Expr
@@ -373,21 +377,108 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 			nodeId = builder.appendNode(node, bindcontext)
 		}
 
-		for i, project := range bindcontext.projects {
-			nodeId, project, err = builder.flattenSubqueries(nodeId, project, bindcontext)
-			if err != nil {
-				return -1, err
+		// add groupByAst info to querybuilder nameByColRef
+		for name, idx := range bindcontext.groupByAst {
+			key := [2]int32{
+				bindcontext.groupTag,
+				idx,
 			}
-
-			if project == nil {
-				return -1, moerr.NewNYI(builder.GetContext(), "non-scalar subquery in SELECT clause")
-			}
-			bindcontext.projects[i] = project
+			builder.nameByColRef[key] = name
 		}
-
+		// add aggregateByAst info querybuilder nameByColRef
+		for name, idx := range bindcontext.aggregateByAst {
+			key := [2]int32{
+				bindcontext.aggregateTag,
+				idx,
+			}
+			builder.nameByColRef[key] = name
+		}
 	}
 
-	return -1, nil
+	// 展开 selectList 中的子查询
+	for i, project := range bindcontext.projects {
+		nodeId, project, err = builder.flattenSubqueries(nodeId, project, bindcontext)
+		if err != nil {
+			return -1, err
+		}
+
+		if project == nil {
+			return -1, moerr.NewNYI(builder.GetContext(), "non-scalar subquery in SELECT clause")
+		}
+		bindcontext.projects[i] = project
+	}
+
+	fmt.Println("projectlist:", bindcontext.projects)
+
+	// append project node
+	nodeId = builder.appendNode(&plan.Node{
+		NodeType: plan.Node_PROJECT,
+		Children: []int32{nodeId},
+	}, bindcontext)
+
+	// append distinct node
+	if clause.Distinct {
+		nodeId = builder.appendNode(&plan.Node{
+			NodeType: plan.Node_DISTINCT,
+			Children: []int32{nodeId},
+		}, bindcontext)
+	}
+
+	// append sort node
+	if len(orderBys) > 0 {
+		builder.appendNode(&plan.Node{
+			NodeType: plan.Node_SORT,
+			Children: []int32{nodeId},
+			OrderBy:  orderBys,
+		}, bindcontext)
+	}
+
+	// append limit info to current node
+	if limitExpr != nil || offsetExpr != nil {
+		currNode := builder.qry.Nodes[nodeId]
+		currNode.Limit = limitExpr
+		currNode.Offset = offsetExpr
+	}
+
+	// 如果plan tree根节点不是project节点，则追加一个project节点
+	if builder.qry.Nodes[nodeId].NodeType != plan.Node_PROJECT {
+		for i := 0; i < resultLen; i++ {
+			bindcontext.results = append(bindcontext.results, &plan.Expr{
+				Typ: bindcontext.projects[i].Typ,
+				Expr: &plan.Expr_Col{
+					Col: &plan.ColRef{
+						RelPos: bindcontext.projectTag,
+						ColPos: int32(i),
+					},
+				},
+			})
+		}
+
+		bindcontext.resultTag = builder.genNewTag()
+		builder.appendNode(&plan.Node{
+			NodeType:    plan.Node_PROJECT,
+			ProjectList: bindcontext.results,
+			Children:    []int32{nodeId},
+			BindingTags: []int32{bindcontext.resultTag},
+		}, bindcontext)
+	} else {
+		/*
+			bindContext的projects  和 queryBuilder.results 区别:
+			queryBuilder.results是查询结果的投影列
+			bindContext的projects是在计划构建过程中,[查询结果的投影列] + [order by使用列]的并集，
+			queryBuilder.projects结果中可能隐式会多处order by列, 因此queryBuilder.projects和queryBuilder.results长度不一定相等
+			例如：
+				select empno,ename from emp order by sal;
+			bindContext的projects:  [empno,ename,sal]
+			queryBuilder.results: [empno,ename]
+		*/
+		bindcontext.results = bindcontext.projects
+	}
+
+	if isRoot {
+		builder.qry.Headings = append(builder.qry.Headings, bindcontext.headings...)
+	}
+	return nodeId, nil
 }
 
 func (builder *QueryBuilder) buildFrom(tableExprs tree.TableExprs, bindcontext *BindContext) (int32, error) {
