@@ -6,6 +6,7 @@ import (
 	"github.com/matrixorigin/matrixone/pkg/common/moerr"
 	"github.com/matrixorigin/matrixone/pkg/container/types"
 	"github.com/matrixorigin/matrixone/pkg/pb/plan"
+	"github.com/matrixorigin/matrixone/pkg/sql/parsers/dialect"
 	"github.com/matrixorigin/matrixone/pkg/sql/parsers/tree"
 	"github.com/matrixorigin/matrixone/pkg/sql/plan/function"
 	"go/constant"
@@ -16,8 +17,84 @@ func (b *baseBinder) GetContext() context.Context {
 }
 
 func (b *baseBinder) baseBindColRef(astExpr *tree.UnresolvedName, depth int32, isRoot bool) (expr *plan.Expr, err error) {
-	//TODO implement me
-	panic("implement me")
+	if b.bindContext == nil {
+		return nil, moerr.NewInvalidInput(b.GetContext(), "ambigous column reference '%v'", astExpr.Parts[0])
+	}
+	columnName := astExpr.Parts[0]
+	tableName := astExpr.Parts[1]
+	exprStr := tree.String(astExpr, dialect.MYSQL)
+
+	relPos := NotFound
+	colPos := NotFound
+
+	var typ *plan.Type
+	if len(tableName) == 0 {
+		if binding, ok := b.bindContext.bindingByCol[columnName]; ok {
+			if binding != nil {
+				relPos = binding.tag
+				colPos = binding.colIdByName[columnName]
+				typ = binding.colTypes[colPos]
+				tableName = binding.tableName
+			} else {
+				return nil, moerr.NewInvalidInput(b.GetContext(), "ambiguous column reference '%v'", exprStr)
+			}
+		} else {
+			err = moerr.NewInvalidInput(b.GetContext(), "column %s does not exist", columnName)
+		}
+	} else {
+		if binding, ok := b.bindContext.bindingByTable[tableName]; ok {
+			colPos = binding.findColumn(columnName)
+			if colPos == AmbiguousName {
+				return nil, moerr.NewInvalidInput(b.GetContext(), "ambiguous column reference '%v'", columnName)
+			}
+
+			if colPos != NotFound {
+				typ = binding.colTypes[colPos]
+				relPos = binding.tag
+			} else {
+				err = moerr.NewInvalidInput(b.GetContext(), "column '%s' does not exist", columnName)
+			}
+		} else {
+			err = moerr.NewInvalidInput(b.GetContext(), "missing FROM-clause entry for table '%v'", tableName)
+		}
+	}
+
+	if colPos != NotFound {
+		b.boundCols = append(b.boundCols, tableName+"."+columnName)
+		expr = &plan.Expr{
+			Typ: typ,
+		}
+
+		if depth == 0 {
+			expr.Expr = &plan.Expr_Col{
+				Col: &plan.ColRef{
+					RelPos: relPos,
+					ColPos: colPos,
+				},
+			}
+		} else {
+			expr.Expr = &plan.Expr_Corr{
+				Corr: &plan.CorrColRef{
+					RelPos: relPos,
+					ColPos: colPos,
+					Depth:  depth,
+				},
+			}
+		}
+		return
+	}
+	parentBindContext := b.bindContext.parent
+	if parentBindContext != nil && parentBindContext.binder == nil {
+		parentBindContext = parentBindContext.parent
+	}
+	if parentBindContext == nil {
+		return
+	}
+	expr, err = parentBindContext.binder.BindColRef(astExpr, depth+1, isRoot)
+	if err == nil {
+		b.bindContext.isDistinct = true
+	}
+	return
 }
 
 func (b *baseBinder) baseBindSubquery(astExpr *tree.Subquery, isRoot bool) (expr *plan.Expr, err error) {

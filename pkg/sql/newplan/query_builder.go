@@ -561,7 +561,37 @@ func (builder *QueryBuilder) buildTable(tableExpr tree.TableExpr, bindcontext *B
 }
 
 func (builder *QueryBuilder) createQuery() (*plan.Query, error) {
+	for i, rootId := range builder.qry.Steps {
+		rootId, _ := builder.pushdownFilters(rootId, nil)
+	}
+
 	return nil, nil
+}
+
+// 遍历plan节点，做谓词下推操作
+func (builder *QueryBuilder) pushdownFilters(nodeId int32, filters []*plan.Expr) (int32, []*plan.Expr) {
+
+	node := builder.qry.Nodes[nodeId]
+	var canPushdown []*plan.Expr
+	var cantPushdown []*plan.Expr
+	switch node.NodeType {
+	case plan.Node_AGG:
+	case plan.Node_FILTER:
+		canPushdown = filters
+		for _, filterExpr := range node.FilterList {
+			canPushdown = append(canPushdown, splitConjunction(applyDistributivity(builder.GetContext(), filterExpr))...)
+		}
+		childNodeId, cantPushDownChild := builder.pushdownFilters(node.Children[0], canPushdown)
+		var extraFilters []*plan.Expr
+
+	case plan.Node_JOIN:
+	case plan.Node_UNION, plan.Node_UNION_ALL, plan.Node_MINUS, plan.Node_MINUS_ALL, plan.Node_INTERSECT, plan.Node_INTERSECT_ALL:
+	case plan.Node_PROJECT:
+	case plan.Node_TABLE_SCAN, plan.Node_EXTERNAL_SCAN:
+
+	}
+
+	return -1, nil
 }
 
 func (builder *QueryBuilder) buildJoinTable(joinTableExpr *tree.JoinTableExpr, bindcontext *BindContext) (int32, error) {

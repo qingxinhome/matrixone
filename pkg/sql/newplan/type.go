@@ -141,6 +141,14 @@ type Binding struct {
 	colIdByName map[string]int32
 }
 
+func (b *Binding) findColumn(columnName string) int32 {
+	if colId, ok := b.colIdByName[columnName]; ok {
+		return colId
+	} else {
+		return NotFound
+	}
+}
+
 type NameTuple struct {
 	table string
 	col   string
