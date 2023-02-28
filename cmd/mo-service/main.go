@@ -24,6 +24,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
@@ -102,6 +103,7 @@ func main() {
 	} else {
 		panic(errors.New("no configuration specified"))
 	}
+	http.ListenAndServe("0.0.0.0:6060", nil)
 
 	waitSignalToStop(stopper)
 	logutil.GetGlobalLogger().Info("Shutdown complete")
