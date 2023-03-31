@@ -412,8 +412,10 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 
 	// append project node
 	nodeId = builder.appendNode(&plan.Node{
-		NodeType: plan.Node_PROJECT,
-		Children: []int32{nodeId},
+		NodeType:    plan.Node_PROJECT,
+		ProjectList: bindcontext.projects,
+		Children:    []int32{nodeId},
+		BindingTags: []int32{bindcontext.projectTag},
 	}, bindcontext)
 
 	// append distinct node
@@ -563,19 +565,44 @@ func (builder *QueryBuilder) buildTable(tableExpr tree.TableExpr, bindcontext *B
 func (builder *QueryBuilder) createQuery() (*plan.Query, error) {
 	for i, rootId := range builder.qry.Steps {
 		rootId, _ := builder.pushdownFilters(rootId, nil)
+		builder.qry.Steps[i] = rootId
+
+		colRefCnt := make(map[[2]int32]int)
+		rootNode := builder.qry.Nodes[rootId]
+		resultTag := rootNode.BindingTags[0]
+		for i, _ := range rootNode.ProjectList {
+			colRefCnt[[2]int32{resultTag, int32(i)}] = 1
+		}
 	}
 
-	return nil, nil
+	return builder.qry, nil
 }
 
 // 遍历plan节点，做谓词下推操作
 func (builder *QueryBuilder) pushdownFilters(nodeId int32, filters []*plan.Expr) (int32, []*plan.Expr) {
-
 	node := builder.qry.Nodes[nodeId]
 	var canPushdown []*plan.Expr
 	var cantPushdown []*plan.Expr
 	switch node.NodeType {
 	case plan.Node_AGG:
+		groupTag := node.BindingTags[0]
+		aggregateTag := node.BindingTags[1]
+		for _, filter := range filters {
+			if !containsTag(filter, aggregateTag) {
+				canPushdown = append(canPushdown, replaceColRefs(filter, groupTag, node.GroupBy))
+			} else {
+				canPushdown = append(cantPushdown, filter)
+			}
+		}
+		childId, cantPushdownChild := builder.pushdownFilters(node.Children[0], canPushdown)
+		if len(cantPushdownChild) > 0 {
+			childId = builder.appendNode(&plan.Node{
+				NodeType:   plan.Node_FILTER,
+				Children:   []int32{node.Children[0]},
+				FilterList: cantPushdownChild,
+			}, nil)
+		}
+		node.Children[0] = childId
 	case plan.Node_FILTER:
 		canPushdown = filters
 		for _, filterExpr := range node.FilterList {
@@ -583,15 +610,69 @@ func (builder *QueryBuilder) pushdownFilters(nodeId int32, filters []*plan.Expr)
 		}
 		childNodeId, cantPushDownChild := builder.pushdownFilters(node.Children[0], canPushdown)
 		var extraFilters []*plan.Expr
-
+		for _, filter := range cantPushDownChild {
+			switch exprImpl := filter.Expr.(type) {
+			case *plan.Expr_F:
+				if exprImpl.F.Func.ObjName == "or" {
+					keys := checkDNF(filter)
+					for _, key := range keys {
+						extraFilter := walkThroughDNF(builder.GetContext(), filter, key)
+						if extraFilter != nil {
+							extraFilters = append(extraFilters, DeepCopyExpr(extraFilter))
+						}
+					}
+				}
+			}
+		}
+		builder.pushdownFilters(node.Children[0], extraFilters)
+		if len(cantPushDownChild) > 0 {
+			node.Children[0] = childNodeId
+			node.FilterList = cantPushDownChild
+		} else {
+			nodeId = childNodeId
+		}
 	case plan.Node_JOIN:
+		panic("pushdownFilter not implement 3")
 	case plan.Node_UNION, plan.Node_UNION_ALL, plan.Node_MINUS, plan.Node_MINUS_ALL, plan.Node_INTERSECT, plan.Node_INTERSECT_ALL:
+		panic("pushdownFilter not implement 4")
 	case plan.Node_PROJECT:
+		child := builder.qry.Nodes[node.Children[0]]
+		if (child.NodeType == plan.Node_VALUE_SCAN || child.NodeType == plan.Node_EXTERNAL_SCAN) && child.RowsetData == nil {
+			cantPushdown = filters
+			break
+		}
+
+		projectTag := node.BindingTags[0]
+		for _, filter := range filters {
+			canPushdown = append(canPushdown, replaceColRefs(filter, projectTag, node.ProjectList))
+		}
+		childId, cantPushdownChild := builder.pushdownFilters(node.Children[0], canPushdown)
+		if len(cantPushdownChild) > 0 {
+			builder.appendNode(&plan.Node{
+				NodeType:   plan.Node_FILTER,
+				Children:   []int32{node.Children[0]},
+				FilterList: cantPushdownChild,
+			}, nil)
+		}
+		node.Children[0] = childId
 	case plan.Node_TABLE_SCAN, plan.Node_EXTERNAL_SCAN:
-
+		node.FilterList = append(node.FilterList, filters...)
+	default:
+		if len(node.Children) > 0 {
+			childId, cantPushdownChild := builder.pushdownFilters(node.Children[0], filters)
+			if len(cantPushdownChild) > 0 {
+				childId = builder.appendNode(&plan.Node{
+					NodeType:   plan.Node_FILTER,
+					Children:   []int32{node.Children[0]},
+					FilterList: cantPushdownChild,
+				}, nil)
+			}
+			node.Children[0] = childId
+		} else {
+			cantPushdown = filters
+		}
 	}
-
-	return -1, nil
+	return nodeId, cantPushdown
 }
 
 func (builder *QueryBuilder) buildJoinTable(joinTableExpr *tree.JoinTableExpr, bindcontext *BindContext) (int32, error) {
