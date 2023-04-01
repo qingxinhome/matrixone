@@ -14,6 +14,28 @@ const (
 	JoinSideCorrelate int  = 1 << iota
 )
 
+func increaseRefCnt(expr *plan.Expr, colRefCnt map[[2]int32]int) {
+	switch exprImpl := expr.Expr.(type) {
+	case *plan.Expr_Col:
+		colRefCnt[[2]int32{exprImpl.Col.RelPos, exprImpl.Col.ColPos}]++
+	case *plan.Expr_F:
+		for _, arg := range exprImpl.F.Args {
+			increaseRefCnt(arg, colRefCnt)
+		}
+	}
+}
+
+func decreaseRefCnt(expr *plan.Expr, colRefCnt map[[2]int32]int) {
+	switch exprImpl := expr.Expr.(type) {
+	case *plan.Expr_Col:
+		colRefCnt[[2]int32{exprImpl.Col.RelPos, exprImpl.Col.ColPos}]--
+	case *plan.Expr_F:
+		for _, arg := range exprImpl.F.Args {
+			decreaseRefCnt(arg, colRefCnt)
+		}
+	}
+}
+
 // 这段代码的作用是替换一个表达式中的列引用。代码中的输入包括一个表达式 expr，一个整数 tag，
 // 和一个表达式切片 projects。代码遍历 expr 中的每个节点，如果遇到列引用节点且该列引用的 RelPos 属性等于输入的 tag，
 // 则将该节点替换为 projects 中对应位置的表达式。最后返回替换后的表达式。

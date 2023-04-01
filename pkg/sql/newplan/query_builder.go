@@ -23,6 +23,169 @@ func NewQueryBuilder(queryType plan.Query_StatementType, compilerContext plan2.C
 	}
 }
 
+type ColRefRemapping struct {
+	// 映射： 在此节点上要变化的列引用 -> 在此节点上所有要变化的列引用中序号, 即localToGlobal的序号。
+	globalToLocal map[[2]int32][2]int32
+	//在此节点上要变化的列引用
+	localToGlobal [][2]int32
+}
+
+// 记录要变化的列引用
+func (m *ColRefRemapping) addColRef(colRef [2]int32) {
+	// global colRef -> [0, index of the localToGlobal] = global colRef
+	m.globalToLocal[colRef] = [2]int32{0, int32(len(m.localToGlobal))}
+	m.localToGlobal = append(m.localToGlobal, colRef)
+}
+
+func (builder *QueryBuilder) remapExpr(expr *plan.Expr, globalTolocalMap map[[2]int32][2]int32) error {
+	switch exprImpl := expr.Expr.(type) {
+	case *plan.Expr_Col:
+		globalKey := [2]int32{exprImpl.Col.RelPos, exprImpl.Col.ColPos}
+		if localValue, ok := globalTolocalMap[globalKey]; ok {
+			exprImpl.Col.RelPos = localValue[0]
+			exprImpl.Col.ColPos = localValue[1]
+			exprImpl.Col.Name = builder.nameByColRef[globalKey]
+		} else {
+			return moerr.NewParseError(builder.GetContext(), "can't find column %v in context's map %v", globalKey, globalTolocalMap)
+		}
+	case *plan.Expr_F:
+		for _, arg := range exprImpl.F.Args {
+			err := builder.remapExpr(arg, globalTolocalMap)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// 函数remapAllColRefs用于对列引用进行重映射。
+func (builder *QueryBuilder) remapAllColRefs(nodeId int32, colRefCnt map[[2]int32]int) (*ColRefRemapping, error) {
+
+	node := builder.qry.Nodes[nodeId]
+
+	remapping := &ColRefRemapping{
+		globalToLocal: make(map[[2]int32][2]int32),
+	}
+
+	switch node.NodeType {
+	case plan.Node_TABLE_SCAN,
+		plan.Node_MATERIAL_SCAN,
+		plan.Node_EXTERNAL_SCAN:
+		for _, expr := range node.FilterList {
+			increaseRefCnt(expr, colRefCnt)
+		}
+		internalRemapping := &ColRefRemapping{
+			globalToLocal: make(map[[2]int32][2]int32),
+		}
+		nodeTag := node.BindingTags[0]
+		newTableDef := &plan.TableDef{
+			Name:          node.TableDef.Name,
+			Defs:          node.TableDef.Defs,
+			TableType:     node.TableDef.TableType,
+			Createsql:     node.TableDef.Createsql,
+			Name2ColIndex: node.TableDef.Name2ColIndex,
+			CompositePkey: node.TableDef.CompositePkey,
+			TblFunc:       node.TableDef.TblFunc,
+			Indices:       node.TableDef.Indices,
+		}
+
+		for i, col := range node.TableDef.Cols {
+			globalRef := [2]int32{nodeTag, int32(i)}
+			if colRefCnt[globalRef] == 0 {
+				continue
+			}
+			internalRemapping.addColRef(globalRef)
+			newTableDef.Cols = append(newTableDef.Cols, col)
+		}
+
+		if len(newTableDef.Cols) == 0 {
+			internalRemapping.addColRef([2]int32{nodeTag, 0})
+			newTableDef.Cols = append(newTableDef.Cols, node.TableDef.Cols[0])
+		}
+		node.TableDef = newTableDef
+		for _, expr := range node.FilterList {
+			decreaseRefCnt(expr, colRefCnt)
+			err := builder.remapExpr(expr, internalRemapping.globalToLocal)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		for i, col := range node.TableDef.Cols {
+			if colRefCnt[internalRemapping.localToGlobal[i]] == 0 {
+				continue
+			}
+			remapping.addColRef(internalRemapping.localToGlobal[i])
+
+			node.ProjectList = append(node.ProjectList, &plan.Expr{
+				Typ: col.Typ,
+				Expr: &plan.Expr_Col{
+					Col: &plan.ColRef{
+						RelPos: 0,
+						ColPos: int32(i),
+						Name:   builder.nameByColRef[internalRemapping.localToGlobal[i]],
+					},
+				},
+			})
+		}
+
+		if len(node.ProjectList) == 0 {
+			if len(node.TableDef.Cols) == 0 {
+				globalRef := [2]int32{nodeTag, 0}
+				remapping.addColRef(globalRef)
+
+				node.ProjectList = append(node.ProjectList, &plan.Expr{
+					Typ: node.TableDef.Cols[0].Typ,
+					Expr: &plan.Expr_Col{
+						Col: &plan.ColRef{
+							RelPos: 0,
+							ColPos: 0,
+							Name:   builder.nameByColRef[globalRef],
+						},
+					},
+				})
+			} else {
+				remapping.addColRef(internalRemapping.localToGlobal[0])
+				node.ProjectList = append(node.ProjectList, &plan.Expr{
+					Typ: node.TableDef.Cols[0].Typ,
+					Expr: &plan.Expr_Col{
+						Col: &plan.ColRef{
+							RelPos: 0,
+							ColPos: 0,
+							Name:   builder.nameByColRef[internalRemapping.localToGlobal[0]],
+						},
+					},
+				})
+			}
+		}
+	case plan.Node_INTERSECT,
+		plan.Node_INTERSECT_ALL,
+		plan.Node_UNION,
+		plan.Node_UNION_ALL,
+		plan.Node_MINUS,
+		plan.Node_MINUS_ALL:
+	case plan.Node_JOIN:
+		return nil, moerr.NewInternalError(builder.GetContext(), "not implement qb 3")
+	case plan.Node_AGG:
+
+	case plan.Node_SORT:
+
+	case plan.Node_FILTER:
+
+	case plan.Node_PROJECT, plan.Node_MATERIAL:
+
+	case plan.Node_DISTINCT:
+		return nil, moerr.NewInternalError(builder.GetContext(), "not implement qb 6")
+	case plan.Node_VALUE_SCAN:
+		return nil, moerr.NewInternalError(builder.GetContext(), "not implement qb 7")
+	default:
+		return nil, moerr.NewInternalError(builder.GetContext(), "not implement qb 8")
+	}
+
+	return nil, nil
+}
+
 func (builder *QueryBuilder) GetContext() context.Context {
 	if builder == nil {
 		return context.TODO()
@@ -591,7 +754,7 @@ func (builder *QueryBuilder) pushdownFilters(nodeId int32, filters []*plan.Expr)
 			if !containsTag(filter, aggregateTag) {
 				canPushdown = append(canPushdown, replaceColRefs(filter, groupTag, node.GroupBy))
 			} else {
-				canPushdown = append(cantPushdown, filter)
+				cantPushdown = append(cantPushdown, filter)
 			}
 		}
 		childId, cantPushdownChild := builder.pushdownFilters(node.Children[0], canPushdown)

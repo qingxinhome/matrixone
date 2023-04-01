@@ -273,7 +273,7 @@ func (b *baseBinder) bindComparisonExpr(astExpr *tree.ComparisonExpr, depth int3
 	var operator string
 	switch astExpr.Op {
 	case tree.EQUAL:
-		operator = ""
+		operator = "="
 	case tree.LESS_THAN:
 		operator = "<"
 	case tree.LESS_THAN_EQUAL:

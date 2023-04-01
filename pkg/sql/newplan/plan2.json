@@ -1,0 +1,437 @@
+{
+  "Plan": {
+    "query": {
+      "stmt_type": 1,
+      "steps": [
+        2
+      ],
+      "nodes": [
+        {
+          "node_type": 2,
+          "stats": {
+            "outcnt": 6000000
+          },
+          "project_list": [
+            {
+              "typ": {
+                "id": 32,
+                "notNullable": true,
+                "width": 15,
+                "precision": 2
+              },
+              "Expr": {
+                "col": {
+                  "col_pos": 1,
+                  "name": "lineitem.l_extendedprice"
+                }
+              }
+            },
+            {
+              "typ": {
+                "id": 32,
+                "notNullable": true,
+                "width": 15,
+                "precision": 2
+              },
+              "Expr": {
+                "col": {
+                  "col_pos": 2,
+                  "name": "lineitem.l_discount"
+                }
+              }
+            }
+          ],
+          "filter_list": [
+            {
+              "typ": {
+                "id": 10,
+                "notNullable": true,
+                "size": 1
+              },
+              "Expr": {
+                "f": {
+                  "func": {
+                    "obj": 7,
+                    "obj_name": "="
+                  },
+                  "args": [
+                    {
+                      "typ": {
+                        "id": 23,
+                        "notNullable": true
+                      },
+                      "Expr": {
+                        "col": {
+                          "name": "lineitem.l_orderkey"
+                        }
+                      }
+                    },
+                    {
+                      "typ": {
+                        "id": 23,
+                        "notNullable": true,
+                        "size": 8
+                      },
+                      "Expr": {
+                        "c": {
+                          "Value": {
+                            "i64val": 2000
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "table_def": {
+            "name": "lineitem",
+            "cols": [
+              {
+                "name": "l_orderkey",
+                "typ": {
+                  "id": 23,
+                  "notNullable": true
+                },
+                "default": {},
+                "pkidx": 1
+              },
+              {
+                "name": "l_extendedprice",
+                "typ": {
+                  "id": 32,
+                  "notNullable": true,
+                  "width": 15,
+                  "precision": 2
+                },
+                "default": {},
+                "pkidx": 1
+              },
+              {
+                "name": "l_discount",
+                "typ": {
+                  "id": 32,
+                  "notNullable": true,
+                  "width": 15,
+                  "precision": 2
+                },
+                "default": {},
+                "pkidx": 1
+              }
+            ],
+            "table_type": "r",
+            "defs": [
+              {
+                "Def": {
+                  "properties": {
+                    "properties": [
+                      {
+                        "key": "relkind",
+                        "value": "r"
+                      },
+                      {
+                        "key": "rel_comment",
+                        "value": "lineitem"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "name2col_index": {
+              "l_comment": 15,
+              "l_commitdate": 11,
+              "l_discount": 6,
+              "l_extendedprice": 5,
+              "l_linenumber": 3,
+              "l_linestatus": 9,
+              "l_orderkey": 0,
+              "l_partkey": 1,
+              "l_quantity": 4,
+              "l_receiptdate": 12,
+              "l_returnflag": 8,
+              "l_shipdate": 10,
+              "l_shipinstruct": 13,
+              "l_shipmode": 14,
+              "l_suppkey": 2,
+              "l_tax": 7
+            }
+          },
+          "obj_ref": {
+            "obj": 8,
+            "schema_name": "tpch",
+            "obj_name": "lineitem"
+          }
+        },
+        {
+          "node_type": 32,
+          "node_id": 1,
+          "stats": {
+            "cost": 6000000,
+            "outcnt": 6000000
+          },
+          "children": [
+            0
+          ],
+          "filter_list": [
+            {
+              "typ": {
+                "id": 10,
+                "notNullable": true,
+                "size": 1
+              },
+              "Expr": {
+                "f": {
+                  "func": {
+                    "obj": 7,
+                    "obj_name": "="
+                  },
+                  "args": [
+                    {
+                      "typ": {
+                        "id": 23,
+                        "notNullable": true
+                      },
+                      "Expr": {
+                        "col": {
+                          "name": "lineitem.l_orderkey"
+                        }
+                      }
+                    },
+                    {
+                      "typ": {
+                        "id": 23,
+                        "notNullable": true,
+                        "size": 8
+                      },
+                      "Expr": {
+                        "c": {
+                          "Value": {
+                            "i64val": 2000
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "node_type": 10,
+          "node_id": 2,
+          "stats": {
+            "cost": 6000000,
+            "outcnt": 6000000
+          },
+          "project_list": [
+            {
+              "typ": {
+                "id": 33,
+                "notNullable": true,
+                "width": 38,
+                "size": 16,
+                "scale": 10
+              },
+              "Expr": {
+                "f": {
+                  "func": {
+                    "obj": 51539607563,
+                    "obj_name": "*"
+                  },
+                  "args": [
+                    {
+                      "typ": {
+                        "id": 33,
+                        "notNullable": true,
+                        "width": 38,
+                        "size": 16,
+                        "scale": 10
+                      },
+                      "Expr": {
+                        "f": {
+                          "func": {
+                            "obj": 90194313216,
+                            "obj_name": "cast"
+                          },
+                          "args": [
+                            {
+                              "typ": {
+                                "id": 32,
+                                "notNullable": true,
+                                "width": 15,
+                                "precision": 2
+                              },
+                              "Expr": {
+                                "col": {
+                                  "name": "lineitem.l_extendedprice"
+                                }
+                              }
+                            },
+                            {
+                              "typ": {
+                                "id": 33,
+                                "notNullable": true,
+                                "width": 38,
+                                "size": 16,
+                                "scale": 10
+                              },
+                              "Expr": {
+                                "t": {
+                                  "typ": {
+                                    "id": 33,
+                                    "notNullable": true,
+                                    "width": 38,
+                                    "size": 16,
+                                    "scale": 10
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "typ": {
+                        "id": 33,
+                        "notNullable": true,
+                        "width": 38,
+                        "size": 16,
+                        "scale": 10
+                      },
+                      "Expr": {
+                        "f": {
+                          "func": {
+                            "obj": 47244640267,
+                            "obj_name": "-"
+                          },
+                          "args": [
+                            {
+                              "typ": {
+                                "id": 33,
+                                "notNullable": true,
+                                "width": 38,
+                                "size": 16,
+                                "scale": 10
+                              },
+                              "Expr": {
+                                "f": {
+                                  "func": {
+                                    "obj": 90194313216,
+                                    "obj_name": "cast"
+                                  },
+                                  "args": [
+                                    {
+                                      "typ": {
+                                        "id": 23,
+                                        "notNullable": true,
+                                        "size": 8
+                                      },
+                                      "Expr": {
+                                        "c": {
+                                          "Value": {
+                                            "i64val": 1
+                                          }
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "typ": {
+                                        "id": 33,
+                                        "notNullable": true,
+                                        "width": 38,
+                                        "size": 16,
+                                        "scale": 10
+                                      },
+                                      "Expr": {
+                                        "t": {
+                                          "typ": {
+                                            "id": 33,
+                                            "notNullable": true,
+                                            "width": 38,
+                                            "size": 16,
+                                            "scale": 10
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "typ": {
+                                "id": 33,
+                                "notNullable": true,
+                                "width": 38,
+                                "size": 16,
+                                "scale": 10
+                              },
+                              "Expr": {
+                                "f": {
+                                  "func": {
+                                    "obj": 90194313216,
+                                    "obj_name": "cast"
+                                  },
+                                  "args": [
+                                    {
+                                      "typ": {
+                                        "id": 32,
+                                        "notNullable": true,
+                                        "width": 15,
+                                        "precision": 2
+                                      },
+                                      "Expr": {
+                                        "col": {
+                                          "col_pos": 1,
+                                          "name": "lineitem.l_discount"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "typ": {
+                                        "id": 33,
+                                        "notNullable": true,
+                                        "width": 38,
+                                        "size": 16,
+                                        "scale": 10
+                                      },
+                                      "Expr": {
+                                        "t": {
+                                          "typ": {
+                                            "id": 33,
+                                            "notNullable": true,
+                                            "width": 38,
+                                            "size": 16,
+                                            "scale": 10
+                                          }
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "children": [
+            0
+          ]
+        }
+      ],
+      "headings": [
+        "l_extendedprice * (1 - l_discount)"
+      ]
+    }
+  }
+}
