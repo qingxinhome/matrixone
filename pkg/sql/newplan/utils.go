@@ -69,7 +69,18 @@ func CalcNodeStats(nodeId int32, builder *QueryBuilder, recursive bool) {
 	case plan.Node_JOIN:
 		panic("unimplement")
 	case plan.Node_AGG:
-		panic("unimplement")
+		if len(node.GroupBy) > 0 {
+			node.Stats = &plan.Stats{
+				Outcnt:      childStats.Outcnt * 0.1,
+				Cost:        childStats.Cost,
+				HashmapSize: childStats.HashmapSize,
+			}
+		} else {
+			node.Stats = &plan.Stats{
+				Outcnt: 1,
+				Cost:   childStats.Cost,
+			}
+		}
 	case plan.Node_UNIQUE:
 		panic("unimplement")
 	case plan.Node_UNION_ALL:
