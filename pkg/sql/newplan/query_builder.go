@@ -60,8 +60,11 @@ func (builder *QueryBuilder) remapExpr(expr *plan.Expr, globalTolocalMap map[[2]
 }
 
 // 函数remapAllColRefs用于对列引用进行重映射。
+// 刚进入函数时，colRefCnt记录的是从树根节点到当点节点所有列的引用的计数信息
+// 每个节点上的处理类似。
+// 先对表达式增加引用计数, 其次对子节点递归执行重映射, 之后对表达式减少引用计数, 用子节点变化的列引用，重映射表达式中的列引用。
+// 生成新的projectlist。 每个节点都会生成projectList。
 func (builder *QueryBuilder) remapAllColRefs(nodeId int32, colRefCnt map[[2]int32]int) (*ColRefRemapping, error) {
-
 	node := builder.qry.Nodes[nodeId]
 
 	remapping := &ColRefRemapping{
@@ -121,6 +124,7 @@ func (builder *QueryBuilder) remapAllColRefs(nodeId int32, colRefCnt map[[2]int3
 			node.ProjectList = append(node.ProjectList, &plan.Expr{
 				Typ: col.Typ,
 				Expr: &plan.Expr_Col{
+					// 改为相对位置，即相对子节点的坐标
 					Col: &plan.ColRef{
 						RelPos: 0,
 						ColPos: int32(i),
@@ -138,6 +142,7 @@ func (builder *QueryBuilder) remapAllColRefs(nodeId int32, colRefCnt map[[2]int3
 				node.ProjectList = append(node.ProjectList, &plan.Expr{
 					Typ: node.TableDef.Cols[0].Typ,
 					Expr: &plan.Expr_Col{
+						// 改为相对位置，即相对子节点的坐标
 						Col: &plan.ColRef{
 							RelPos: 0,
 							ColPos: 0,
@@ -150,6 +155,7 @@ func (builder *QueryBuilder) remapAllColRefs(nodeId int32, colRefCnt map[[2]int3
 				node.ProjectList = append(node.ProjectList, &plan.Expr{
 					Typ: node.TableDef.Cols[0].Typ,
 					Expr: &plan.Expr_Col{
+						// 改为相对位置，即相对子节点的坐标
 						Col: &plan.ColRef{
 							RelPos: 0,
 							ColPos: 0,
@@ -168,13 +174,244 @@ func (builder *QueryBuilder) remapAllColRefs(nodeId int32, colRefCnt map[[2]int3
 	case plan.Node_JOIN:
 		return nil, moerr.NewInternalError(builder.GetContext(), "not implement qb 3")
 	case plan.Node_AGG:
+		//对groupby增加colRefCnt列引用计数。
+		for _, expr := range node.GroupBy {
+			increaseRefCnt(expr, colRefCnt)
+		}
+		//对agglist增加colRefCnt列引用计数。
+		for _, expr := range node.AggList {
+			increaseRefCnt(expr, colRefCnt)
+		}
 
+		//采用递归的方式对子节点的列引用进行重映射。递归完成后，得到子节点变化的列引用childRemapping。
+		childRemapping, err := builder.remapAllColRefs(node.Children[0], colRefCnt)
+		if err != nil {
+			return nil, err
+		}
+
+		groupTag := node.BindingTags[0]
+		aggTag := node.BindingTags[1]
+
+		for idx, expr := range node.GroupBy {
+			decreaseRefCnt(expr, colRefCnt)
+			err := builder.remapExpr(expr, childRemapping.globalToLocal)
+			if err != nil {
+				return nil, err
+			}
+
+			globalRef := [2]int32{groupTag, int32(idx)}
+			if colRefCnt[globalRef] == 0 {
+				continue
+			}
+			remapping.addColRef(globalRef)
+			node.ProjectList = append(node.ProjectList, &plan.Expr{
+				Typ: expr.Typ,
+				Expr: &plan.Expr_Col{
+					Col: &plan.ColRef{
+						RelPos: -1,
+						ColPos: int32(idx),
+						Name:   builder.nameByColRef[globalRef],
+					},
+				},
+			})
+		}
+
+		for idx, expr := range node.AggList {
+			decreaseRefCnt(expr, colRefCnt)
+			err := builder.remapExpr(expr, childRemapping.globalToLocal)
+			if err != nil {
+				return nil, err
+			}
+
+			globalRef := [2]int32{aggTag, int32(idx)}
+			if colRefCnt[globalRef] == 0 {
+				continue
+			}
+			remapping.addColRef(globalRef)
+			node.ProjectList = append(node.ProjectList, &plan.Expr{
+				Typ: expr.Typ,
+				Expr: &plan.Expr_Col{
+					Col: &plan.ColRef{
+						RelPos: -2,
+						ColPos: int32(idx),
+						Name:   builder.nameByColRef[globalRef],
+					},
+				},
+			})
+		}
+
+		if len(node.ProjectList) == 0 {
+			if len(node.GroupBy) > 0 {
+				globalRef := [2]int32{groupTag, 0}
+				remapping.addColRef(globalRef)
+				node.ProjectList = append(node.ProjectList, &plan.Expr{
+					Typ: node.GroupBy[0].Typ,
+					Expr: &plan.Expr_Col{
+						Col: &plan.ColRef{
+							RelPos: -1,
+							ColPos: 0,
+							Name:   builder.nameByColRef[globalRef],
+						},
+					},
+				})
+			} else {
+				globalRef := [2]int32{aggTag, 0}
+				remapping.addColRef(globalRef)
+				node.ProjectList = append(node.ProjectList, &plan.Expr{
+					Typ: node.AggList[0].Typ,
+					Expr: &plan.Expr_Col{
+						Col: &plan.ColRef{
+							RelPos: -2,
+							ColPos: 0,
+						},
+					},
+				})
+			}
+		}
 	case plan.Node_SORT:
+		// 对orderby expr list增加colRefCnt列引用计数。
+		for _, orderBy := range node.OrderBy {
+			increaseRefCnt(orderBy.Expr, colRefCnt)
+		}
+		// 使用递归的方式对子节点列引用重映射。递归完成后，得到子节点变化的列引用childRemapping。
+		childRemapping, err := builder.remapAllColRefs(node.Children[0], colRefCnt)
+		if err != nil {
+			return nil, err
+		}
 
+		for _, orderBy := range node.OrderBy {
+			decreaseRefCnt(orderBy.Expr, colRefCnt)
+			err := builder.remapExpr(orderBy.Expr, childRemapping.globalToLocal)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// 处理子节点变化的列引用
+		childProjectList := builder.qry.Nodes[node.Children[0]].ProjectList
+		for i, globalRef := range childRemapping.localToGlobal {
+			if colRefCnt[globalRef] == 0 {
+				continue
+			}
+			remapping.addColRef(globalRef)
+			// 使用子节点的projectlist为Sort节点构造projectlist
+			node.ProjectList = append(node.ProjectList, &plan.Expr{
+				Typ: childProjectList[i].Typ,
+				Expr: &plan.Expr_Col{
+					// 改为相对位置，即相对子节点的坐标
+					Col: &plan.ColRef{
+						RelPos: 0,
+						ColPos: int32(i),
+					},
+				},
+			})
+		}
+
+		if len(node.ProjectList) == 0 && len(childRemapping.localToGlobal) > 0 {
+			globalRef := childRemapping.localToGlobal[0]
+			remapping.addColRef(globalRef)
+
+			node.ProjectList = append(node.ProjectList, &plan.Expr{
+				Typ: childProjectList[0].Typ,
+				Expr: &plan.Expr_Col{
+					// 改为相对位置，即相对子节点的坐标
+					Col: &plan.ColRef{
+						RelPos: 0,
+						ColPos: 0,
+						Name:   builder.nameByColRef[globalRef],
+					},
+				},
+			})
+		}
 	case plan.Node_FILTER:
+		// 对filterlist增加colRefCnt列引用计数。
+		for _, expr := range node.FilterList {
+			increaseRefCnt(expr, colRefCnt)
+		}
+		childRemapping, err := builder.remapAllColRefs(node.Children[0], colRefCnt)
+		if err != nil {
+			return nil, err
+		}
+		for _, expr := range node.FilterList {
+			// 减少colRefCnt列引用计数。
+			decreaseRefCnt(expr, colRefCnt)
+			err := builder.remapExpr(expr, childRemapping.globalToLocal)
+			if err != nil {
+				return nil, err
+			}
+		}
 
+		//处理子节点变化的列引用(childRemapping.localToGlobal)。
+		childProjectList := builder.qry.Nodes[node.Children[0]].ProjectList
+		for i, globalRef := range childRemapping.localToGlobal {
+			if colRefCnt[globalRef] == 0 {
+				continue
+			}
+			remapping.addColRef(globalRef)
+			node.ProjectList = append(node.ProjectList, &plan.Expr{
+				Typ: childProjectList[i].Typ,
+				Expr: &plan.Expr_Col{
+					Col: &plan.ColRef{
+						RelPos: 0,
+						ColPos: int32(i),
+						Name:   builder.nameByColRef[globalRef],
+					},
+				},
+			})
+		}
+
+		if len(node.ProjectList) == 0 {
+			if len(childRemapping.localToGlobal) > 0 {
+				remapping.addColRef(childRemapping.localToGlobal[0])
+			}
+			node.ProjectList = append(node.ProjectList, &plan.Expr{
+				Typ: childProjectList[0].Typ,
+				Expr: &plan.Expr_Col{
+					Col: &plan.ColRef{
+						RelPos: 0,
+						ColPos: 0,
+					},
+				},
+			})
+		}
 	case plan.Node_PROJECT, plan.Node_MATERIAL:
+		projectTag := node.BindingTags[0]
+		var needProject []int32
+		// 对projectList排除掉不需要的表达式，对需要的表达式增加colRefCnt列引用计数。
+		for i, expr := range node.ProjectList {
+			globalRef := [2]int32{projectTag, int32(i)}
+			if colRefCnt[globalRef] == 0 {
+				continue
+			}
+			needProject = append(needProject, int32(i))
+			increaseRefCnt(expr, colRefCnt)
+		}
 
+		if len(needProject) == 0 {
+			increaseRefCnt(node.ProjectList[0], colRefCnt)
+			needProject = append(needProject, 0)
+		}
+
+		childRemapping, err := builder.remapAllColRefs(node.Children[0], colRefCnt)
+		if err != nil {
+			return nil, err
+		}
+
+		var newProjectList []*plan.Expr
+		for _, need := range needProject {
+			expr := node.ProjectList[need]
+			decreaseRefCnt(expr, colRefCnt)
+			err := builder.remapExpr(expr, childRemapping.globalToLocal)
+			if err != nil {
+				return nil, err
+			}
+
+			globalTag := [2]int32{projectTag, need}
+			remapping.addColRef(globalTag)
+
+			newProjectList = append(newProjectList, expr)
+		}
+		node.ProjectList = newProjectList
 	case plan.Node_DISTINCT:
 		return nil, moerr.NewInternalError(builder.GetContext(), "not implement qb 6")
 	case plan.Node_VALUE_SCAN:
@@ -183,7 +420,9 @@ func (builder *QueryBuilder) remapAllColRefs(nodeId int32, colRefCnt map[[2]int3
 		return nil, moerr.NewInternalError(builder.GetContext(), "not implement qb 8")
 	}
 
-	return nil, nil
+	node.BindingTags = nil
+
+	return remapping, nil
 }
 
 func (builder *QueryBuilder) GetContext() context.Context {
@@ -591,7 +830,7 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 
 	// append sort node
 	if len(orderBys) > 0 {
-		builder.appendNode(&plan.Node{
+		nodeId = builder.appendNode(&plan.Node{
 			NodeType: plan.Node_SORT,
 			Children: []int32{nodeId},
 			OrderBy:  orderBys,
@@ -620,7 +859,7 @@ func (builder *QueryBuilder) buildSelect(stmt *tree.Select, bindcontext *BindCon
 		}
 
 		bindcontext.resultTag = builder.genNewTag()
-		builder.appendNode(&plan.Node{
+		nodeId = builder.appendNode(&plan.Node{
 			NodeType:    plan.Node_PROJECT,
 			ProjectList: bindcontext.results,
 			Children:    []int32{nodeId},
@@ -730,11 +969,17 @@ func (builder *QueryBuilder) createQuery() (*plan.Query, error) {
 		rootId, _ := builder.pushdownFilters(rootId, nil)
 		builder.qry.Steps[i] = rootId
 
+		// 执行计划树的列引用计数map
 		colRefCnt := make(map[[2]int32]int)
 		rootNode := builder.qry.Nodes[rootId]
 		resultTag := rootNode.BindingTags[0]
 		for i, _ := range rootNode.ProjectList {
 			colRefCnt[[2]int32{resultTag, int32(i)}] = 1
+		}
+		// 通过列引用计数的方式。对没有被引用的列进行裁剪。对留下来的列引用重新编号，并用新编号替换plan树中的旧编号。
+		_, err := builder.remapAllColRefs(rootId, colRefCnt)
+		if err != nil {
+			return nil, err
 		}
 	}
 
