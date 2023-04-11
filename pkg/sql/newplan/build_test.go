@@ -111,19 +111,19 @@ func runOneStmt(compilerContext plan.CompilerContext, t *testing.T, sql string) 
 
 func executeSql(sql string) (bool, error) {
 	mockCompilerCtx := plan.NewMockCompilerContext(false)
-	one, err := parsers.ParseOne(mockCompilerCtx.GetContext(), dialect.MYSQL, sql)
-	if err != nil {
-		return false, err
-	}
-	plan1, err := BuildPlan(mockCompilerCtx, one)
-	if err != nil {
-		return false, err
-	}
-	fmt.Printf("plan1:%s \n", plan1.String())
-	err = os.WriteFile("plan1.json", toJSON(plan1), 0777)
-	if err != nil {
-		return false, err
-	}
+	//one, err := parsers.ParseOne(mockCompilerCtx.GetContext(), dialect.MYSQL, sql)
+	//if err != nil {
+	//	return false, err
+	//}
+	//plan1, err := BuildPlan(mockCompilerCtx, one)
+	//if err != nil {
+	//	return false, err
+	//}
+	//fmt.Printf("plan1:%s \n", plan1.String())
+	//err = os.WriteFile("plan1.json", toJSON(plan1), 0777)
+	//if err != nil {
+	//	return false, err
+	//}
 	//--------------------------------------------------------------------------------
 	two, err := parsers.ParseOne(mockCompilerCtx.GetContext(), dialect.MYSQL, sql)
 	if err != nil {
@@ -301,9 +301,9 @@ func TestBuildTpch_q1(t *testing.T) {
 					l_returnflag,
 					l_linestatus
 				;`
-		//res, err := executeSql(sql)
-		//convey.ShouldBeTrue(res)
-		//convey.ShouldBeNil(err)
-		explainSql(EXPLAIN_VERBOSE+sql, t)
+		res, err := executeSql(sql)
+		convey.ShouldBeTrue(res)
+		convey.ShouldBeNil(err)
+		//explainSql(EXPLAIN_VERBOSE+sql, t)
 	})
 }

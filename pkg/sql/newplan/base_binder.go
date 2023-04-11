@@ -391,22 +391,22 @@ func bindFuncExprImplByPlanExpr(ctx context.Context, name string, args []*plan.E
 
 		if args[0].Typ.Id == int32(types.T_date) && args[1].Typ.Id == int32(types.T_interval) {
 			name = "date_add"
-			args, err = resetDateFunctionArgs(args[0], args[1])
+			args, err = resetDateFunctionArgs(ctx, args[0], args[1])
 		} else if args[0].Typ.Id == int32(types.T_interval) && args[1].Typ.Id == int32(types.T_date) {
 			name = "date_add"
-			args, err = resetDateFunctionArgs(args[1], args[0])
+			args, err = resetDateFunctionArgs(ctx, args[1], args[0])
 		} else if args[0].Typ.Id == int32(types.T_datetime) && args[1].Typ.Id == int32(types.T_interval) {
 			name = "date_add"
-			args, err = resetDateFunctionArgs(args[0], args[1])
+			args, err = resetDateFunctionArgs(ctx, args[0], args[1])
 		} else if args[0].Typ.Id == int32(types.T_interval) && args[1].Typ.Id == int32(types.T_datetime) {
 			name = "date_add"
-			args, err = resetDateFunctionArgs(args[1], args[0])
+			args, err = resetDateFunctionArgs(ctx, args[1], args[0])
 		} else if args[0].Typ.Id == int32(types.T_varchar) && args[1].Typ.Id == int32(types.T_interval) {
 			name = "date_add"
-			args, err = resetDateFunctionArgs(args[0], args[1])
+			args, err = resetDateFunctionArgs(ctx, args[0], args[1])
 		} else if args[0].Typ.Id == int32(types.T_interval) && args[1].Typ.Id == int32(types.T_varchar) {
 			name = "date_add"
-			args, err = resetDateFunctionArgs(args[1], args[0])
+			args, err = resetDateFunctionArgs(ctx, args[1], args[0])
 		} else if args[0].Typ.Id == int32(types.T_varchar) && args[1].Typ.Id == int32(types.T_varchar) {
 			name = "concat"
 		}
@@ -426,13 +426,13 @@ func bindFuncExprImplByPlanExpr(ctx context.Context, name string, args []*plan.E
 		// rewrite "date '2001' - interval '1 day'" to date_sub(date '2001', 1, day(unit))
 		if args[0].Typ.Id == int32(types.T_date) && args[1].Typ.Id == int32(types.T_interval) {
 			name = "date_sub"
-			args, err = resetDateFunctionArgs(args[0], args[1])
+			args, err = resetDateFunctionArgs(ctx, args[0], args[1])
 		} else if args[0].Typ.Id == int32(types.T_datetime) && args[1].Typ.Id == int32(types.T_interval) {
 			name = "date_sub"
-			args, err = resetDateFunctionArgs(args[0], args[1])
+			args, err = resetDateFunctionArgs(ctx, args[0], args[1])
 		} else if args[0].Typ.Id == int32(types.T_varchar) && args[1].Typ.Id == int32(types.T_interval) {
 			name = "date_sub"
-			args, err = resetDateFunctionArgs(args[0], args[1])
+			args, err = resetDateFunctionArgs(ctx, args[0], args[1])
 		}
 		if err != nil {
 			return nil, err
@@ -547,6 +547,52 @@ func bindFuncExprImplByPlanExpr(ctx context.Context, name string, args []*plan.E
 
 }
 
-func resetDateFunctionArgs(dateExpr *plan.Expr, intervalExpr *plan.Expr) ([]*plan.Expr, error) {
+func resetDateFunctionArgs(ctx context.Context, dateExpr *plan.Expr, intervalExpr *plan.Expr) ([]*plan.Expr, error) {
+	firstExpr := intervalExpr.Expr.(*plan.Expr_List).List.List[0]
+	secondExpr := intervalExpr.Expr.(*plan.Expr_List).List.List[1]
+
+	intervalTypeStr := secondExpr.Expr.(*plan.Expr_C).C.Value.(*plan.Const_Sval).Sval
+	intervalType, err := types.IntervalTypeOf(intervalTypeStr)
+	if err != nil {
+		return nil, err
+	}
+
+	intervalTypeInFunction := &plan.Type{
+		Id:   int32(types.T_int64),
+		Size: 8,
+	}
+
+	if firstExpr.Typ.Id == int32(types.T_varchar) ||
+		firstExpr.Typ.Id == int32(types.T_char) {
+
+		strConstExpr := firstExpr.Expr.(*plan.Expr_C)
+		s := strConstExpr.C.Value.(*plan.Const_Sval).Sval
+		returnNum, returnType, err := types.NormalizeInterval(s, intervalType)
+		if err != nil {
+			return nil, err
+		}
+		// "date '2020-10-10' - interval 1 Hour"  will return datetime
+		// so we rewrite "date '2020-10-10' - interval 1 Hour"  to  "date_add(datetime, 1, hour)"
+		if dateExpr.Typ.Id == int32(types.T_date) {
+			switch returnType {
+			case types.Day, types.Week, types.Month, types.Quarter, types.Year:
+			default:
+				dateExpr, err = appendCastBeforeExpr(ctx, dateExpr, &plan.Type{
+					Id:   int32(types.T_datetime),
+					Size: 8,
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+		return []*plan.Expr{
+			dateExpr,
+			makePlan2Int64ConstExpr(returnNum),
+			makePlan2Int64ConstExpr(int64(returnType)),
+		}, nil
+	}
+
+	fmt.Printf("xxx %v", intervalTypeInFunction)
 	return nil, nil
 }
