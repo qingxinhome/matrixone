@@ -57,6 +57,8 @@ type StatementInfo struct {
 	ResponseAt time.Time           `json:"response_at"`
 	Duration   time.Duration       `json:"duration"` // unit: ns
 	ExecPlan   any                 `json:"exec_plan"`
+	// new ExecPlan
+	ExecPlan2 SerializableExecPlan `json:"-"` // set by SetSerializableExecPlan
 	// RowsRead, BytesScan generated from ExecPlan
 	RowsRead  int64 `json:"rows_read"`  // see ExecPlan2Json
 	BytesScan int64 `json:"bytes_scan"` // see ExecPlan2Json
@@ -167,7 +169,11 @@ func (s *StatementInfo) ExecPlan2Json(ctx context.Context) (string, string) {
 	var jsonByte []byte
 	var statsJsonByte []byte
 	var stats Statistic
-	if s.SerializeExecPlan == nil {
+
+	if s.ExecPlan2 != nil {
+		jsonByte, statsJsonByte, stats = s.ExecPlan2.Marshal(ctx, uuid.UUID(s.StatementID))
+		s.RowsRead, s.BytesScan = stats.RowsRead, stats.BytesScan
+	} else if s.SerializeExecPlan == nil {
 		// use defaultSerializeExecPlan
 		if f := getDefaultSerializeExecPlan(); f == nil {
 			uuidStr := uuid.UUID(s.StatementID).String()
@@ -207,6 +213,17 @@ func getDefaultSerializeExecPlan() SerializeExecPlanFunc {
 	} else {
 		return defaultSerializeExecPlan.Load().(SerializeExecPlanFunc)
 	}
+}
+
+type SerializableExecPlan interface {
+	Marshal(context.Context, uuid.UUID) ([]byte, []byte, Statistic)
+	Free()
+}
+
+func (s *StatementInfo) SetSerializableExecPlan(execPlan SerializableExecPlan) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	s.ExecPlan2 = execPlan
 }
 
 // SetExecPlan record execPlan should be TxnComputationWrapper.plan obj, which support 2json.
