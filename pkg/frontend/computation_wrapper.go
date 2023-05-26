@@ -386,7 +386,7 @@ func (cwft *TxnComputationWrapper) Compile(requestCtx context.Context, u interfa
 
 func (cwft *TxnComputationWrapper) RecordExecPlan(ctx context.Context) error {
 	if stm := motrace.StatementFromContext(ctx); stm != nil {
-		_, task := rtrace.NewTask(ctx, "RecordExecPlan3")
+		_, task := rtrace.NewTask(ctx, "RecordExecPlan")
 		defer task.End()
 		stm.SetSerializableExecPlan(NewMarshalPlanHandler(ctx, stm.StatementID, cwft.plan))
 	}

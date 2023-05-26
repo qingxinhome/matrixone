@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -3657,84 +3656,24 @@ func buildErrorJsonPlan(uuid uuid.UUID, errcode uint16, msg string) []byte {
 	return buffer.Bytes()
 }
 
-func serializePlanToJson(ctx context.Context, queryPlan *plan2.Plan, uuid uuid.UUID) (jsonBytes []byte, statsJonsBytes []byte, stats motrace.Statistic) {
-	if queryPlan != nil && queryPlan.GetQuery() != nil {
-		marshalPlan := explain.BuildJsonPlan(ctx, uuid, &explain.MarshalPlanOptions, queryPlan.GetQuery())
-		stats.RowsRead, stats.BytesScan = marshalPlan.StatisticsRead()
-		// XXX, `buffer` can be used repeatedly as a global variable in the future
-		// Provide a relatively balanced initial capacity [8192] for byte slice to prevent multiple memory requests
-		buffer := bytes.NewBuffer(make([]byte, 0, 8192))
-		encoder := json.NewEncoder(buffer)
-		encoder.SetEscapeHTML(false)
-		err := encoder.Encode(marshalPlan)
-		if err != nil {
-			moError := moerr.NewInternalError(ctx, "serialize plan to json error: %s", err.Error())
-			jsonBytes = buildErrorJsonPlan(uuid, moError.ErrorCode(), moError.Error())
-		} else {
-			jsonBytes = buffer.Bytes()
-		}
-		// data transform Global to json
-		if len(marshalPlan.Steps) > 0 {
-			// if len(marshalPlan.Steps) > 1 {
-			// logutil.Fatalf("need handle multi execPlan trees, cnt: %d", len(marshalPlan.Steps))
-			// }
-			// XXX, `buffer` can be used repeatedly as a global variable in the future
-			buffer := &bytes.Buffer{}
-			encoder := json.NewEncoder(buffer)
-			encoder.SetEscapeHTML(false)
-			global := marshalPlan.Steps[0].GraphData.Global
-			err = encoder.Encode(&global)
-			if err != nil {
-				statsJonsBytes = []byte(fmt.Sprintf(`{"code":200,"message":"%q"}`, err.Error()))
-			} else {
-				statsJonsBytes = buffer.Bytes()
-			}
-		}
-	} else {
-		jsonBytes = buildErrorJsonPlan(uuid, moerr.ErrWarn, "sql query no record execution plan")
-	}
-	return jsonBytes, statsJonsBytes, stats
-}
-
-type jsonPlanHandler struct {
-	jsonBytes      []byte
-	statsJsonBytes []byte
-	stats          motrace.Statistic
-}
-
-func NewJsonPlanHandler(ctx context.Context, uuid uuid.UUID, plan *plan2.Plan) *jsonPlanHandler {
-	h := &marshalPlanHandler{
-		marshalPlan: explain.BuildJsonPlan(ctx, uuid, &explain.MarshalPlanOptions, plan.GetQuery()),
-	}
-	jsonBytes, statsJsonBytes, stats := h.Marshal(ctx, uuid)
-	return &jsonPlanHandler{
-		jsonBytes:      jsonBytes,
-		statsJsonBytes: statsJsonBytes,
-		stats:          stats,
-	}
-}
-
-func (h *jsonPlanHandler) Marshal(ctx context.Context, uuid uuid.UUID) (jsonBytes []byte, statsJsonBytes []byte, stats motrace.Statistic) {
-	return h.jsonBytes, h.statsJsonBytes, h.stats
-}
-
 type marshalPlanHandler struct {
 	marshalPlan *explain.ExplainData
+	uuid        uuid.UUID
 }
 
 func NewMarshalPlanHandler(ctx context.Context, uuid uuid.UUID, plan *plan2.Plan) *marshalPlanHandler {
 	// TODO: need mem improvement
-	copyPlan := plan2.DeepCopyPlan(plan)
 	return &marshalPlanHandler{
-		marshalPlan: explain.BuildJsonPlan(ctx, uuid, &explain.MarshalPlanOptions, copyPlan),
+		marshalPlan: explain.BuildJsonPlan(ctx, uuid, &explain.MarshalPlanOptions, plan.GetQuery()),
+		uuid:        uuid,
 	}
 }
 
 func (h *marshalPlanHandler) Free() {}
 
-func (h *marshalPlanHandler) Marshal(ctx context.Context, uuid uuid.UUID) (jsonBytes []byte, statsJonsBytes []byte, stats motrace.Statistic) {
+func (h *marshalPlanHandler) Marshal(ctx context.Context) (jsonBytes []byte, statsJonsBytes []byte, stats motrace.Statistic) {
 	if h.marshalPlan == nil {
-		jsonBytes = buildErrorJsonPlan(uuid, moerr.ErrWarn, "sql query no record execution plan")
+		jsonBytes = buildErrorJsonPlan(h.uuid, moerr.ErrWarn, "sql query no record execution plan")
 	} else {
 		stats.RowsRead, stats.BytesScan = h.marshalPlan.StatisticsRead()
 		// XXX, `buffer` can be used repeatedly as a global variable in the future
@@ -3745,15 +3684,15 @@ func (h *marshalPlanHandler) Marshal(ctx context.Context, uuid uuid.UUID) (jsonB
 		err := encoder.Encode(h.marshalPlan)
 		if err != nil {
 			moError := moerr.NewInternalError(ctx, "serialize plan to json error: %s", err.Error())
-			jsonBytes = buildErrorJsonPlan(uuid, moError.ErrorCode(), moError.Error())
+			jsonBytes = buildErrorJsonPlan(h.uuid, moError.ErrorCode(), moError.Error())
 		} else {
 			jsonBytes = buffer.Bytes()
 		}
 		// data transform Global to json
 		if len(h.marshalPlan.Steps) > 0 {
-			if len(h.marshalPlan.Steps) > 1 {
-				logutil.Fatalf("need handle multi execPlan trees, cnt: %d", len(h.marshalPlan.Steps))
-			}
+			// if len(h.marshalPlan.Steps) > 1 {
+			// logutil.Fatalf("need handle multi execPlan trees, cnt: %d", len(h.marshalPlan.Steps))
+			// }
 			// XXX, `buffer` can be used repeatedly as a global variable in the future
 			buffer := &bytes.Buffer{}
 			encoder := json.NewEncoder(buffer)
@@ -3767,36 +3706,5 @@ func (h *marshalPlanHandler) Marshal(ctx context.Context, uuid uuid.UUID) (jsonB
 			}
 		}
 	}
-
 	return
-}
-
-type SerializeExecPlanHandler struct {
-	plan *plan2.Plan
-}
-
-func (h *SerializeExecPlanHandler) Marshal(ctx context.Context, uuid uuid.UUID) ([]byte, []byte, motrace.Statistic) {
-	if h.plan == nil {
-		return serializePlanToJson(ctx, nil, uuid)
-	} else {
-		// data transform to json dataStruct
-		return serializePlanToJson(ctx, h.plan, uuid)
-	}
-}
-
-// SerializeExecPlan Serialize the execution plan by json
-var SerializeExecPlan = func(ctx context.Context, plan any, uuid uuid.UUID) ([]byte, []byte, motrace.Statistic) {
-	if plan == nil {
-		return serializePlanToJson(ctx, nil, uuid)
-	} else if queryPlan, ok := plan.(*plan2.Plan); !ok {
-		moError := moerr.NewInternalError(ctx, "execPlan not type of plan2.Plan: %s", reflect.ValueOf(plan).Type().Name())
-		return buildErrorJsonPlan(uuid, moError.ErrorCode(), moError.Error()), []byte{}, motrace.Statistic{}
-	} else {
-		// data transform to json dataStruct
-		return serializePlanToJson(ctx, queryPlan, uuid)
-	}
-}
-
-func init() {
-	motrace.SetDefaultSerializeExecPlan(SerializeExecPlan)
 }
