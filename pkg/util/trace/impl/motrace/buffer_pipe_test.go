@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	"github.com/matrixorigin/matrixone/pkg/util/internalExecutor"
 
 	"github.com/google/gops/agent"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 )

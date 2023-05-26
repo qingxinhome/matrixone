@@ -16,8 +16,6 @@ package frontend
 
 import (
 	"context"
-	rtrace "runtime/trace"
-
 	"github.com/google/uuid"
 	"github.com/matrixorigin/matrixone/pkg/clusterservice"
 	"github.com/matrixorigin/matrixone/pkg/common/moerr"
@@ -386,8 +384,6 @@ func (cwft *TxnComputationWrapper) Compile(requestCtx context.Context, u interfa
 
 func (cwft *TxnComputationWrapper) RecordExecPlan(ctx context.Context) error {
 	if stm := motrace.StatementFromContext(ctx); stm != nil {
-		_, task := rtrace.NewTask(ctx, "RecordExecPlan")
-		defer task.End()
 		stm.SetSerializableExecPlan(NewMarshalPlanHandler(ctx, stm.StatementID, cwft.plan))
 	}
 	return nil

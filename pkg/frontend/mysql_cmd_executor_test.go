@@ -1054,7 +1054,7 @@ func TestSerializePlanToJson(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 		h := NewMarshalPlanHandler(mock.CurrentContext().GetContext(), uuid.New(), plan)
-		json, _, stats := h.Marshal(mock.CurrentContext().GetContext(), uuid.New())
+		json, _, stats := h.Marshal(mock.CurrentContext().GetContext())
 		require.Equal(t, int64(0), stats.RowsRead)
 		require.Equal(t, int64(0), stats.BytesScan)
 		t.Logf("SQL plan to json : %s\n", string(json))
