@@ -151,7 +151,6 @@ func TestStatementInfo_Report_EndStatement(t *testing.T) {
 	}
 }
 
-var realNoExecPlanJsonResult = `{"code":200,"message":"NO ExecPlan Serialize function","steps":null,"success":false,"uuid":"00000000-0000-0000-0000-000000000000"}`
 var dummyNoExecPlanJsonResult = `{"code":200,"message":"no exec plan"}`
 var dummyNoExecPlanJsonResult2 = `{"func":"dummy2","code":200,"message":"no exec plan"}`
 
@@ -180,7 +179,6 @@ var dummySerializeExecPlan2 = func(_ context.Context, plan any, _ uuid.UUID) ([]
 
 func TestStatementInfo_ExecPlan2Json(t *testing.T) {
 	type args struct {
-		setDefault        func()
 		ExecPlan          any
 		SerializeExecPlan SerializeExecPlanFunc
 	}
