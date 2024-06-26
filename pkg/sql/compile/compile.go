@@ -341,14 +341,23 @@ func (c *Compile) Compile(ctx context.Context, pn *plan.Plan, fill func(*batch.B
 
 	c.pn = pn
 
+	if strings.HasPrefix(c.sql, "SELECT") {
+		fmt.Println("--")
+	}
+
 	// Compile may exec some function that need engine.Engine.
 	c.proc.Ctx = context.WithValue(c.proc.Ctx, defines.EngineKey{}, c.e)
 	// generate logic pipeline for query.
 	c.scope, err = c.compileScope(ctx, pn)
-
 	if err != nil {
 		return err
 	}
+
+	if strings.HasPrefix(c.sql, "SELECT") {
+		scopeInfo := DebugShowScopes(c.scope)
+		fmt.Printf("----------------------------------wuxiliang start----------------------------------\nSQL:%s %s\n--------------------------------------------", c.sql, scopeInfo)
+	}
+
 	for _, s := range c.scope {
 		if len(s.NodeInfo.Addr) == 0 {
 			s.NodeInfo.Addr = c.addr
@@ -544,6 +553,11 @@ func (c *Compile) Run(_ uint64) (result *util2.RunResult, err error) {
 	c.ctx, span = trace.Start(c.ctx, "Compile.Run", trace.WithKind(trace.SpanKindStatement))
 	_, task := gotrace.NewTask(context.TODO(), "pipeline.Run")
 	defer func() {
+		if strings.HasPrefix(c.sql, "SELECT") {
+			scopeInfo := DebugShowScopes(c.scope)
+			fmt.Printf("----------------------------------wuxiliang end----------------------------------\nSQL:%s %s\n--------------------------------------------", c.sql, scopeInfo)
+		}
+
 		releaseRunC()
 
 		task.End()
