@@ -334,6 +334,10 @@ func (s *Scope) MergeRun(c *Compile) error {
 
 // RemoteRun send the scope to a remote node for execution.
 func (s *Scope) RemoteRun(c *Compile) error {
+	if strings.HasPrefix(c.sql, "SELECT ROUND(SUM(distance)") {
+		fmt.Println("---------------yyyyyyyyy----------------------")
+	}
+
 	if !s.canRemote(c, true) || !cnclient.IsCNClientReady() {
 		return s.ParallelRun(c)
 	}
@@ -441,6 +445,7 @@ func buildJoinParallelRun(s *Scope, c *Compile) (*Scope, error) {
 	}
 	probeScope, buildScope := c.newJoinProbeScope(s, ss), c.newJoinBuildScope(s, ss)
 
+	// 使用newParallelScope函数创建一个新的并行Scope。如果创建失败，释放之前创建的Scopes。
 	ns, err := newParallelScope(c, s, ss)
 	if err != nil {
 		ReleaseScopes(ss)
@@ -888,6 +893,8 @@ func (s *Scope) isRight() bool {
 	return s != nil && (s.Instructions[0].Op == vm.Right || s.Instructions[0].Op == vm.RightSemi || s.Instructions[0].Op == vm.RightAnti)
 }
 
+// newParallelScope 函数的作用是为给定的 Scope 创建一个新的并行执行的 Scope，并根据不同的指令类型（如 Top, Limit, Group,
+// Sample, Offset 等）生成 相应的合并指令。它会调整原始指令以适应并行执行的需要，并将这些指令添加到新的并行 Scope 中。
 func newParallelScope(c *Compile, s *Scope, ss []*Scope) (*Scope, error) {
 	var flg bool
 
@@ -1132,7 +1139,9 @@ func newParallelScope(c *Compile, s *Scope, ss []*Scope) (*Scope, error) {
 		}
 		s.Instructions = s.Instructions[:2]
 	}
+	// 将新的并行 Scope 的 Magic 属性设置为 Merge。
 	s.Magic = Merge
+	// 将原始 Scope 的前置 Scopes 设置为新的并行 Scope 的前置 Scopes。
 	s.PreScopes = ss
 	cnt := 0
 	for _, s := range ss {
@@ -1153,6 +1162,7 @@ func newParallelScope(c *Compile, s *Scope, ss []*Scope) (*Scope, error) {
 	j := 0
 	for i := range ss {
 		if !ss[i].IsEnd {
+			// 为每个新的 Scope 创建一个连接指令 Connector，并将其添加到新的 Scope 中。
 			ss[i].appendInstruction(vm.Instruction{
 				Op: vm.Connector,
 				Arg: connector.NewArgument().

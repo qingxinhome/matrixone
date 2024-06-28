@@ -206,7 +206,7 @@ func debugShowScopes(ss []*Scope, gap int, rmp map[*process.WaitRegister]int) st
 			} else {
 				str = fmt.Sprintf("%s (idx:%v, isFirst&isLast)", name, instruction.Idx)
 			}
-			
+
 			if id == vm.Connector {
 				var receiver = "unknown"
 				arg := instruction.Arg.(*connector.Argument)
@@ -262,7 +262,7 @@ func debugShowScopes(ss []*Scope, gap int, rmp map[*process.WaitRegister]int) st
 		if ss[i].Proc != nil {
 			receiverStr = getReceiverStr(ss[i], ss[i].Proc.Reg.MergeReceivers)
 		}
-		str += fmt.Sprintf("Scope %d (Magic: %s, Receiver: %s): [", i+1, magicShow(ss[i].Magic), receiverStr)
+		str += fmt.Sprintf("Scope %d (Magic: %s, IsEnd: %v, Receiver: %s): [", i+1, magicShow(ss[i].Magic), ss[i].IsEnd, receiverStr)
 		for j, instruction := range ss[i].Instructions {
 			if j != 0 {
 				str += " -> "
