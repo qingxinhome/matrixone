@@ -120,7 +120,7 @@ func (a *analyze) Input(bat *batch.Batch, isFirst bool) {
 		atomic.AddInt64(&a.analInfo.InputRows, int64(bat.RowCount()))
 	}
 
-	if a.op != nil {
+	if a.op != nil && bat != nil && isFirst {
 		a.op.TotalInputSize += int64(bat.Size())
 		a.op.TotalInputRows += int64(bat.RowCount())
 	}
@@ -132,7 +132,7 @@ func (a *analyze) Output(bat *batch.Batch, isLast bool) {
 		atomic.AddInt64(&a.analInfo.OutputRows, int64(bat.RowCount()))
 	}
 
-	if a.op != nil {
+	if a.op != nil && bat != nil && isLast {
 		a.op.TotalOutputSize += int64(bat.Size())
 		a.op.TotalOutputRows += int64(bat.RowCount())
 	}
@@ -151,7 +151,7 @@ func (a *analyze) DiskIO(bat *batch.Batch) {
 		atomic.AddInt64(&a.analInfo.DiskIO, int64(bat.Size()))
 	}
 
-	if a.op != nil {
+	if a.op != nil && bat != nil {
 		a.op.TotalDiskIO += int64(bat.Size())
 	}
 }
@@ -161,7 +161,7 @@ func (a *analyze) S3IOByte(bat *batch.Batch) {
 		atomic.AddInt64(&a.analInfo.S3IOByte, int64(bat.Size()))
 	}
 
-	if a.op != nil {
+	if a.op != nil && bat != nil {
 		a.op.TotalS3IOByte += int64(bat.Size())
 	}
 }
@@ -192,7 +192,7 @@ func (a *analyze) Network(bat *batch.Batch) {
 		atomic.AddInt64(&a.analInfo.NetworkIO, int64(bat.Size()))
 	}
 
-	if a.op != nil {
+	if a.op != nil && bat != nil {
 		a.op.TotalNetworkIO += int64(bat.Size())
 	}
 }
