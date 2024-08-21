@@ -159,7 +159,10 @@ func showSingleScope(scope *Scope, index int, gap int, rmp map[*process.WaitRegi
 	gapNextLine(gap, buffer)
 
 	// Scope Header
-	receiverStr := getReceiverStr(scope, scope.Proc.Reg.MergeReceivers, rmp)
+	receiverStr := "nil"
+	if scope.Proc != nil {
+		receiverStr = getReceiverStr(scope, scope.Proc.Reg.MergeReceivers, rmp)
+	}
 	buffer.WriteString(fmt.Sprintf("Scope %d (Magic: %s, addr:%v, mcpu: %v, Receiver: %s)", index+1, magicShow(scope.Magic), scope.NodeInfo.Addr, scope.NodeInfo.Mcpu, receiverStr))
 
 	// Scope DataSource
