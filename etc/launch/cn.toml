@@ -12,3 +12,22 @@ port-base = 18000
 check-fraction = 65536
 enable-metrics = true
 
+[observability.cu]
+cpu_price = 0.0000000000000784
+cu_unit = 0.0000010538530272
+io_in_price = 0.000001
+io_out_price = 0.000001
+mem_price = 0.00000000000000000000000448
+traffic_price_0 = 0.000000000894
+traffic_price_1 = 0
+traffic_price_2 = 0.000000000894
+
+[observability.cu_v1]
+cpu_price = 0.0000000000000743
+cu_unit = 0.0000010026988039
+io_in_price = 0.000001
+io_out_price = 0.000001
+mem_price = 0.00000000000000000000000679
+traffic_price_0 = 0.000000000894
+traffic_price_1 = 0
+traffic_price_2 = 0.000000000894
