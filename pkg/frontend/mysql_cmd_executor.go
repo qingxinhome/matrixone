@@ -3515,21 +3515,21 @@ func (h *marshalPlanHandler) Stats(ctx context.Context, ses FeSession) (statsByt
 			int64(statsInfo.ParseDuration+
 				statsInfo.CompileDuration+
 				statsInfo.PlanDuration) - (statsInfo.IOAccessTimeConsumption + statsInfo.IOMergerTimeConsumption())
-		ses.Infof(ctx, "wuxiliang cputime statement_id:%s, statement_type:%s, "+
-			"statsInfo(%d + %d + %d + %d + %d - %d - %d) = %d, PlanStatsDuration: %d, PlanResolveVariableDuration: %d",
-			uuid.UUID(h.stmt.StatementID).String(),
-			h.stmt.StatementType,
-			int64(statsByte.GetTimeConsumed()),
-			statsInfo.BuildReaderDuration,
-			statsInfo.ParseDuration,
-			statsInfo.CompileDuration,
-			statsInfo.PlanDuration,
-			statsInfo.IOAccessTimeConsumption,
-			statsInfo.IOMergerTimeConsumption(),
-			val,
-			statsInfo.BuildPlanStatsDuration,
-			statsInfo.BuildPlanResolveVarDuration,
-		)
+		//ses.Infof(ctx, "wuxiliang cputime statement_id:%s, statement_type:%s, "+
+		//	"statsInfo(%d + %d + %d + %d + %d - %d - %d) = %d, PlanStatsDuration: %d, PlanResolveVariableDuration: %d",
+		//	uuid.UUID(h.stmt.StatementID).String(),
+		//	h.stmt.StatementType,
+		//	int64(statsByte.GetTimeConsumed()),
+		//	statsInfo.BuildReaderDuration,
+		//	statsInfo.ParseDuration,
+		//	statsInfo.CompileDuration,
+		//	statsInfo.PlanDuration,
+		//	statsInfo.IOAccessTimeConsumption,
+		//	statsInfo.IOMergerTimeConsumption(),
+		//	val,
+		//	statsInfo.BuildPlanStatsDuration,
+		//	statsInfo.BuildPlanResolveVarDuration,
+		//)
 
 		if val < 0 {
 			ses.Infof(ctx, "negative cpu statement_id:%s, statement_type:%s, statsInfo(%d + %d + %d + %d + %d - %d - %d) = %d",
