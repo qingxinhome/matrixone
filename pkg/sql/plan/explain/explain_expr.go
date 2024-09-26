@@ -168,19 +168,24 @@ func describeExpr(ctx context.Context, expr *plan.Expr, options *ExplainOptions,
 			}
 		}
 	case *plan.Expr_Vec:
-		vec := vector.NewVec(types.T_any.ToType())
-		vec.UnmarshalBinary(exprImpl.Vec.Data)
-		if vec.Length() > 16 {
-			//don't display too long data in explain
-			originalLen := vec.Length()
-			vec.SetLength(16)
-			buf.WriteString(vec.String())
-			s := fmt.Sprintf("... %v values", originalLen)
-			buf.WriteString(s)
-		} else {
-			buf.WriteString(vec.String())
+
+		//vec := vector.NewVec(types.T_any.ToType())
+		//vec.UnmarshalBinary(exprImpl.Vec.Data)
+		//if vec.Length() > 16 {
+		//	//don't display too long data in explain
+		//	originalLen := vec.Length()
+		//	vec.SetLength(16)
+		//	buf.WriteString(vec.String())
+		//	s := fmt.Sprintf("... %v values", originalLen)
+		//	buf.WriteString(s)
+		//} else {
+		//	buf.WriteString(vec.String())
+		//}
+		//vec.Free(nil)
+		err := handleExprVec(exprImpl.Vec.Data, buf)
+		if err != nil {
+			return err
 		}
-		vec.Free(nil)
 	case *plan.Expr_T:
 		tt := types.T(expr.Typ.Id)
 		if tt == types.T_decimal64 || tt == types.T_decimal128 {
@@ -191,6 +196,33 @@ func describeExpr(ctx context.Context, expr *plan.Expr, options *ExplainOptions,
 	default:
 		panic("unsupported expr")
 	}
+	return nil
+}
+
+func handleExprVec(data []byte, buf *bytes.Buffer) error {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("-----------wuxiliangx-----------Panic occurred: %v, data address: %p\n", r, data)
+			panic(r)
+		}
+	}()
+
+	vec := vector.NewVec(types.T_any.ToType())
+	if err := vec.UnmarshalBinary(data); err != nil {
+		fmt.Printf("----------------wuxiliang4---------------data ptr: %p, Error unmarshalling data: %v\n", err)
+		return err
+	}
+
+	if vec.Length() > 16 {
+		originalLen := vec.Length()
+		vec.SetLength(16)
+		buf.WriteString(vec.String())
+		s := fmt.Sprintf("... %v values", originalLen)
+		buf.WriteString(s)
+	} else {
+		buf.WriteString(vec.String())
+	}
+	vec.Free(nil)
 	return nil
 }
 

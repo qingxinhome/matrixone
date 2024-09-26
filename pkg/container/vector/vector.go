@@ -520,7 +520,32 @@ func (v *Vector) MarshalBinary() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+
+	resBytes := buf.Bytes()
+	ValidateVector(resBytes)
+	return resBytes, nil
+}
+
+func ValidateVector(data []byte) {
+	buf := bytes.NewBuffer(make([]byte, 0, 50))
+	vec := NewVec(types.T_any.ToType())
+
+	vec.UnmarshalBinary(data)
+	if err := vec.UnmarshalBinary(data); err != nil {
+		fmt.Printf("----------------wuxiliang1---------------data ptr: %p, Error unmarshalling data: %v\n", data, err)
+		return
+	}
+
+	if vec.Length() > 16 {
+		//don't display too long data in explain
+		originalLen := vec.Length()
+		vec.SetLength(16)
+		buf.WriteString(vec.String())
+		buf.WriteString(fmt.Sprintf("... %v values", originalLen))
+	} else {
+		buf.WriteString(vec.String())
+	}
+	fmt.Printf("----------------wuxiliang2---------------data ptr: %p, vec str: %s\n", data, buf.String())
 }
 
 func (v *Vector) MarshalBinaryWithBuffer(buf *bytes.Buffer) error {
