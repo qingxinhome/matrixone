@@ -101,7 +101,8 @@ func InefficientMustStrCol(v *Vector) []string {
 	if v.GetType().Oid == types.T_any || len(v.data) == 0 {
 		return nil
 	}
-	varcol := MustFixedColNoTypeCheck[types.Varlena](v)
+	//varcol := MustFixedColNoTypeCheck[types.Varlena](v)
+	varcol := MustFixedColWithTypeCheck[types.Varlena](v)
 	if v.class == CONSTANT {
 		return []string{(&varcol[0]).UnsafeGetString(v.area)}
 	} else {
