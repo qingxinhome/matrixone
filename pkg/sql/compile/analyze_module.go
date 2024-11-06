@@ -53,13 +53,13 @@ func (anal *AnalyzeModule) Reset() {
 		anal.remotePhyPlans = nil
 		anal.explainPhyBuffer = nil
 		anal.retryTimes = 0
-		for _, node := range anal.qry.Nodes {
-			if node.AnalyzeInfo == nil {
-				node.AnalyzeInfo = new(plan.AnalyzeInfo)
-			} else {
-				node.AnalyzeInfo.Reset()
-			}
-		}
+		//for _, node := range anal.qry.Nodes {
+		//	if node.AnalyzeInfo == nil {
+		//		node.AnalyzeInfo = new(plan.AnalyzeInfo)
+		//	} else {
+		//		node.AnalyzeInfo.Reset()
+		//	}
+		//}
 	}
 
 }
